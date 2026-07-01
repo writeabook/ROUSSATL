@@ -1,0 +1,25 @@
+[package]
+name = "osal"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Operating System Abstraction Layer — facade crate"
+
+[lib]
+crate-type = ["rlib"]
+
+[features]
+default = ["posix"]
+posix = ["osal-backend-posix"]
+mock = ["osal-backend-mock"]
+
+std = ["osal-api/std", "osal-shared/std"]
+alloc = ["osal-api/alloc", "osal-shared/alloc"]
+
+[dependencies]
+osal-api = { path = "../osal-api" }
+osal-shared = { path = "../osal-shared" }
+osal-backend-posix = { path = "../osal-backend-posix", optional = true }
+osal-backend-mock = { path = "../osal-backend-mock", optional = true }

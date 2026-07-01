@@ -1,0 +1,33 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/osal-api",
+    "crates/osal-shared",
+    "crates/osal-portable",
+    "crates/osal-backend-posix",
+    "crates/osal-backend-mock",
+    "crates/osal-bsp",
+    "crates/osal-bsp-linux",
+    "crates/osal-testkit",
+    "crates/osal",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85.0"
+authors = ["OSAL Contributors"]
+license = "Proprietary"
+description = "Operating System Abstraction Layer for embedded and real-time systems"
+
+[workspace.dependencies]
+libc = { version = "0.2", default-features = false }
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+codegen-units = 1
+debug = true
+lto = true
+panic = "abort"

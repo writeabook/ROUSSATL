@@ -1,0 +1,21 @@
+[package]
+name = "osal-backend-posix"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "POSIX/Linux backend for the OSAL framework"
+
+[lib]
+crate-type = ["rlib"]
+
+[features]
+default = []
+std = []
+
+[dependencies]
+osal-api = { path = "../osal-api" }
+osal-shared = { path = "../osal-shared" }
+osal-portable = { path = "../osal-portable" }
+libc = { workspace = true }

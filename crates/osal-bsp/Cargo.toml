@@ -1,0 +1,18 @@
+[package]
+name = "osal-bsp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Board support package abstraction for the OSAL framework"
+
+[lib]
+crate-type = ["rlib"]
+
+[features]
+default = []
+std = []
+
+[dependencies]
+osal-api = { path = "../osal-api" }

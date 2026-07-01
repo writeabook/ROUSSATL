@@ -1,0 +1,17 @@
+[package]
+name = "osal-bsp-linux"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Linux host BSP for the OSAL framework"
+
+[lib]
+crate-type = ["rlib"]
+
+[features]
+default = []
+
+[dependencies]
+osal-bsp = { path = "../osal-bsp" }

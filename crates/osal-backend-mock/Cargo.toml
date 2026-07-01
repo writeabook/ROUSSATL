@@ -1,0 +1,19 @@
+[package]
+name = "osal-backend-mock"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Mock backend for testing in the OSAL framework"
+
+[lib]
+crate-type = ["rlib"]
+
+[features]
+default = []
+std = ["osal-api/std", "osal-shared/std"]
+
+[dependencies]
+osal-api = { path = "../osal-api" }
+osal-shared = { path = "../osal-shared" }

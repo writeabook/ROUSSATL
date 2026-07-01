@@ -1,0 +1,20 @@
+[package]
+name = "osal-portable"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Portable helper implementations for the OSAL framework"
+
+[lib]
+crate-type = ["rlib"]
+
+[features]
+default = []
+std = ["osal-api/std", "osal-shared/std"]
+alloc = ["osal-api/alloc", "osal-shared/alloc"]
+
+[dependencies]
+osal-api = { path = "../osal-api" }
+osal-shared = { path = "../osal-shared" }
