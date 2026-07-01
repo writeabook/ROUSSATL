@@ -21,12 +21,12 @@ use core::time::Duration;
 /// ```ignore
 /// use osal::prelude::*;
 ///
-/// let start = PosixClock::now();
+/// let start = Clock::now();
 /// do_work();
-/// let elapsed = PosixClock::elapsed(start);
+/// let elapsed = Clock::elapsed(start);
 /// println!("Work took {} ms", elapsed.as_millis());
 ///
-/// PosixClock::delay(Duration::from_millis(100));
+/// Clock::delay(Duration::from_millis(100));
 /// ```
 pub trait Clock {
     /// Return the current monotonic time.

@@ -28,7 +28,7 @@ use crate::types::{ExitCode, Handle, Priority};
 /// ```ignore
 /// use osal::prelude::*;
 ///
-/// let task = PosixTaskBuilder::new()
+/// let task = TaskBuilder::new()
 ///     .name("worker")
 ///     .priority(2)
 ///     .spawn(|| { /* work */ })?;
@@ -39,12 +39,13 @@ use crate::types::{ExitCode, Handle, Priority};
 pub trait Task: Sized {
     /// Block until the task exits, or `timeout` expires.
     ///
-    /// Returns `Ok(ExitCode)` on successful join.
-    /// Returns `Error::Timeout` if the task did not exit in time.
-    /// Returns `Error::NotInitialized` if the task was never started.
+    /// Returns `Ok(ExitCode)` on successful join. Once the task has
+    /// exited, subsequent calls return the cached `ExitCode` immediately.
     ///
-    /// Consumes `self`; the handle is invalid after a successful join.
-    fn join(self, timeout: Timeout) -> Result<ExitCode>;
+    /// Returns `Error::Timeout` if the task did not exit within
+    /// `timeout`. The caller retains the handle and may retry.
+    /// Returns `Error::NotInitialized` if the task was never started.
+    fn join(&self, timeout: Timeout) -> Result<ExitCode>;
 
     /// Return the opaque handle identifying this task.
     fn handle(&self) -> Handle;
@@ -81,7 +82,7 @@ pub trait Task: Sized {
 /// # Examples
 ///
 /// ```ignore
-/// let task = PosixTaskBuilder::new()
+/// let task = TaskBuilder::new()
 ///     .name("sensor")
 ///     .stack_size(8192)
 ///     .priority(3)

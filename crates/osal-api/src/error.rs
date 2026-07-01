@@ -31,6 +31,8 @@ pub enum Error {
     QueueFull,
     /// Queue is empty, nothing to receive.
     QueueEmpty,
+    /// Queue has been closed and cannot accept new operations.
+    QueueClosed,
     /// The specified message size does not match the queue's message size.
     InvalidMessageSize,
     /// Failed to acquire the lock.

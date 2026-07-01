@@ -28,7 +28,7 @@ use crate::time::Timeout;
 /// ```ignore
 /// use osal::prelude::*;
 ///
-/// let q = PosixQueue::new(8, 4)?;
+/// let q = Queue::new(8, 4)?;
 ///
 /// // Send two u32 messages
 /// q.send(&1u32.to_le_bytes(), Timeout::NoWait)?;

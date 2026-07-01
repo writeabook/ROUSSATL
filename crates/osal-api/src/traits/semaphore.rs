@@ -29,7 +29,7 @@ use crate::time::Timeout;
 /// use osal::prelude::*;
 ///
 /// // Resource pool: at most 3 concurrent accesses
-/// let pool = PosixCountingSemaphore::new(3, 3)?;
+/// let pool = CountingSemaphore::new(3, 3)?;
 /// pool.acquire(Timeout::Forever)?;
 /// // ... use one resource slot ...
 /// pool.release()?;
@@ -85,7 +85,7 @@ pub trait CountingSemaphore: Sized {
 /// ```ignore
 /// use osal::prelude::*;
 ///
-/// let ready = PosixBinarySemaphore::new()?;
+/// let ready = BinarySemaphore::new()?;
 ///
 /// // Task A: wait for signal
 /// ready.acquire(Timeout::Forever)?;

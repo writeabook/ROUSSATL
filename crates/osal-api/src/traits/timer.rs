@@ -32,7 +32,7 @@ pub type TimerCallback = alloc::boxed::Box<dyn Fn() + Send + 'static>;
 /// use core::time::Duration;
 /// use osal::prelude::*;
 ///
-/// let timer = PosixTimer::new(
+/// let timer = Timer::new(
 ///     "heartbeat",
 ///     Duration::from_millis(500),
 ///     TimerMode::Periodic,

@@ -17,19 +17,17 @@ use crate::time::Timeout;
 /// exactly one drop of the returned guard. The mutex is fully released
 /// only when the last guard is dropped.
 ///
-/// # ISR semantics
+/// # ISR safety
 ///
-/// [`isr_lock`](Mutex::isr_lock) is a non-blocking variant. On backends
-/// without true ISR context it behaves identically to
-/// `lock(Timeout::NoWait)`. On backends where ISR mutex operations are
-/// unsupported it returns `Error::Unsupported`.
+/// Mutex operations are **not** ISR-safe. Use [`Semaphore`] or
+/// [`Queue::isr_send`] for interrupt-context signaling.
 ///
 /// # Examples
 ///
 /// ```ignore
 /// use osal::prelude::*;
 ///
-/// let counter = PosixMutex::new(0u32)?;
+/// let counter = Mutex::new(0u32)?;
 /// {
 ///     let mut guard = counter.lock(Timeout::Forever)?;
 ///     *guard += 1;
@@ -63,11 +61,4 @@ pub trait Mutex<T>: Sized {
     /// (recursive lock). Each `lock` call produces a new guard;
     /// dropping that guard releases one recursion level.
     fn lock(&self, timeout: Timeout) -> Result<Self::Guard<'_>>;
-
-    /// Non-blocking lock attempt, safe to call from ISR context.
-    ///
-    /// Returns `Error::LockFailed` if the mutex is held by another
-    /// context. Returns `Error::Unsupported` if the backend does not
-    /// support ISR mutex operations.
-    fn isr_lock(&self) -> Result<Self::Guard<'_>>;
 }
