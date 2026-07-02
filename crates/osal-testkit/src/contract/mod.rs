@@ -18,9 +18,11 @@
 //! ```
 
 pub mod clock;
+pub mod fault;
 pub mod lifetime;
 pub mod mutex;
 pub mod queue;
 pub mod semaphore;
+pub mod system;
 pub mod task;
 pub mod timer;
