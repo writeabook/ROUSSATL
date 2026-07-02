@@ -91,9 +91,15 @@ pub trait Queue: Sized {
 
     /// Permanently close the queue.
     ///
-    /// Wakes all blocked senders and receivers (they return
-    /// `Error::QueueClosed`). Idempotent: calling `close` on an
-    /// already-closed queue is safe.
+    /// Closing prevents future sends. Already queued messages remain
+    /// readable. A receiver returns `Error::QueueClosed` only when
+    /// the queue is both closed and empty.
+    ///
+    /// Blocked senders are woken with `Error::QueueClosed`. Blocked
+    /// receivers are woken if the queue is empty; otherwise they may
+    /// continue draining buffered messages.
+    ///
+    /// Idempotent: calling `close` on an already-closed queue is safe.
     fn close(&self);
 
     // ---- introspection ----

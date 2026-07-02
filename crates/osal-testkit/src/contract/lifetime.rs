@@ -6,6 +6,7 @@
 //! Tests in this module require `Clone` support on the tested object.
 //! Backends whose types do not implement `Clone` skip these tests.
 
+use osal_api::error::Error;
 use osal_api::time::Timeout;
 use osal_api::traits::queue::Queue as _;
 
@@ -61,7 +62,7 @@ where
 
     // Both handles see the queue as closed.
     let result = q2.send(&[1, 2], Timeout::NoWait);
-    assert!(result.is_err());
+    assert!(matches!(result, Err(Error::QueueClosed)));
 }
 
 // ---------------------------------------------------------------------------

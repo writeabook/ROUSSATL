@@ -9,7 +9,7 @@
 /// backend failures). Production backends can safely ignore this trait.
 pub trait FaultFactory {
     /// Clear all pending fault configurations.
-    fn clear_faults(&self);
+    fn clear_faults(&self) {}
 
     /// Cause the next queue creation to fail with the given error.
     fn fail_next_queue_create(&self, _error: osal_api::error::Error) {}

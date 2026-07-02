@@ -26,7 +26,12 @@ pub fn now_is_monotonic<F: ClockFactory>(_factory: &F) {
     assert!(b >= a);
 }
 
-/// `elapsed()` returns a non-negative duration.
+/// Smoke test: `elapsed()` returns a non-negative duration.
+///
+/// Note: `Duration` is already a non-negative type by construction,
+/// so this primarily verifies the method can be called. Stronger
+/// elapsed-contract tests (e.g. `elapsed_tracks_advanced_time`) belong
+/// in the controlled group.
 pub fn elapsed_is_non_negative<F: ClockFactory>(_factory: &F) {
     let start = F::Clock::now();
     let elapsed = F::Clock::elapsed(start);

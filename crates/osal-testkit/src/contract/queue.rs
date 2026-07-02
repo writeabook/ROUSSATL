@@ -7,7 +7,7 @@ use osal_api::error::Error;
 use osal_api::time::Timeout;
 use osal_api::traits::queue::Queue as _;
 
-use crate::factory::{ClockFactory, QueueFactory};
+use crate::factory::QueueFactory;
 
 /// Create with valid parameters.
 pub fn create<F: QueueFactory>(factory: &F) {
@@ -201,17 +201,18 @@ pub fn run_isr_contracts<F: QueueFactory>(factory: &F) {
     isr_recv::<F>(factory);
 }
 
-/// Wait / timeout tests (requires [`ClockFactory`]).
+/// Wait / timeout tests.
 ///
-/// Future concurrency tests (recv_blocks_until_send, send_blocks_until_recv,
-/// close_wakes_blocked_receiver) will additionally require [`TaskFactory`].
-pub fn run_wait_contracts<F: QueueFactory + ClockFactory>(factory: &F) {
+/// Future timed tests (deadline checking, fake-clock precision) will
+/// require [`ClockFactory`]; concurrency tests (recv_blocks_until_send,
+/// close_wakes_blocked_receiver) will require [`TaskFactory`].
+pub fn run_wait_contracts<F: QueueFactory>(factory: &F) {
     recv_timeout::<F>(factory);
     send_timeout_when_full::<F>(factory);
 }
 
 /// All current contract tests.
-pub fn run_all<F: QueueFactory + ClockFactory>(factory: &F) {
+pub fn run_all<F: QueueFactory>(factory: &F) {
     run_immediate_contracts(factory);
     run_lifetime_contracts(factory);
     run_isr_contracts(factory);
