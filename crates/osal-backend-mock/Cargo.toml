@@ -17,3 +17,5 @@ std = ["osal-api/std", "osal-shared/std"]
 [dependencies]
 osal-api = { path = "../osal-api" }
 osal-shared = { path = "../osal-shared" }
+osal-portable = { path = "../osal-portable" }
+osal-testkit = { path = "../osal-testkit" }
