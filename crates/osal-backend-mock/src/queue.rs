@@ -172,3 +172,57 @@ impl Queue for MockQueue {
         self.inner.borrow().buffer.len()
     }
 }
+
+// ---------------------------------------------------------------------------
+// Factories (testkit)
+// ---------------------------------------------------------------------------
+
+/// Factory for creating mock queues (no fault injection).
+pub struct MockQueueFactory;
+
+#[cfg(feature = "testkit")]
+impl osal_testkit::factory::QueueFactory for MockQueueFactory {
+    type Queue = MockQueue;
+
+    fn create_queue(&self, capacity: usize, msg_size: usize) -> Result<Self::Queue> {
+        MockQueue::new(capacity, msg_size)
+    }
+}
+
+/// Factory with shared fault state for queue + fault contract tests.
+pub struct MockFaultyQueueFactory {
+    faults: Rc<RefCell<FaultState>>,
+}
+
+impl MockFaultyQueueFactory {
+    /// Create a new factory with empty fault state.
+    pub fn new() -> Self {
+        Self {
+            faults: Rc::new(RefCell::new(FaultState::default())),
+        }
+    }
+}
+
+#[cfg(feature = "testkit")]
+impl osal_testkit::factory::QueueFactory for MockFaultyQueueFactory {
+    type Queue = MockQueue;
+
+    fn create_queue(&self, capacity: usize, msg_size: usize) -> Result<Self::Queue> {
+        MockQueue::new_with_faults(capacity, msg_size, Rc::clone(&self.faults))
+    }
+}
+
+#[cfg(feature = "testkit")]
+impl osal_testkit::factory::FaultFactory for MockFaultyQueueFactory {
+    fn clear_faults(&self) {
+        self.faults.borrow_mut().clear();
+    }
+
+    fn fail_next_queue_create(&self, error: Error) {
+        self.faults.borrow_mut().next_queue_create = Some(error);
+    }
+
+    fn fail_next_queue_send(&self, error: Error) {
+        self.faults.borrow_mut().next_queue_send = Some(error);
+    }
+}

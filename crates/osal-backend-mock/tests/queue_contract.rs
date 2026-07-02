@@ -6,7 +6,7 @@
 //! ```
 
 use osal_backend_mock::clock::MockClockControl;
-use osal_backend_mock::queue::MockQueueFactory;
+use osal_backend_mock::queue::{MockFaultyQueueFactory, MockQueueFactory};
 
 // ---------------------------------------------------------------------------
 // Queue contracts
@@ -46,4 +46,14 @@ fn mock_clock_controlled_contracts() {
     let factory = MockClockControl;
     factory.reset();
     osal_testkit::contract::clock::run_controlled_contracts(&factory);
+}
+
+// ---------------------------------------------------------------------------
+// Fault contracts
+// ---------------------------------------------------------------------------
+
+#[test]
+fn mock_queue_fault_contracts() {
+    let factory = MockFaultyQueueFactory::new();
+    osal_testkit::contract::fault::run_queue_fault_contracts(&factory);
 }
