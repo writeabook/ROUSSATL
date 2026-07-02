@@ -36,11 +36,11 @@ pub fn validate_send_message_size(expected: usize, actual: usize) -> Result<()> 
     Ok(())
 }
 
-/// Validate that a receive buffer is large enough.
+/// Validate that a receive buffer has the correct length.
 ///
-/// Returns `Error::InvalidMessageSize` if `actual < expected`.
+/// Returns `Error::InvalidMessageSize` if `actual != expected`.
 pub fn validate_recv_buffer_size(expected: usize, actual: usize) -> Result<()> {
-    if actual < expected {
+    if actual != expected {
         return Err(Error::InvalidMessageSize);
     }
     Ok(())
@@ -90,15 +90,21 @@ mod tests {
     }
 
     #[test]
-    fn reject_recv_small_buffer() {
+    fn reject_recv_wrong_size() {
+        // Too small
         assert!(matches!(
             validate_recv_buffer_size(4, 2),
+            Err(Error::InvalidMessageSize)
+        ));
+        // Too large
+        assert!(matches!(
+            validate_recv_buffer_size(4, 8),
             Err(Error::InvalidMessageSize)
         ));
     }
 
     #[test]
-    fn accept_recv_large_buffer() {
-        assert!(validate_recv_buffer_size(4, 8).is_ok());
+    fn accept_recv_correct_size() {
+        assert!(validate_recv_buffer_size(4, 4).is_ok());
     }
 }

@@ -114,12 +114,12 @@ impl ByteQueue {
     ///
     /// Returns `Error::QueueClosed` if the queue is closed **and** empty.
     /// Returns `Error::QueueEmpty` if the queue is open and empty.
-    /// Returns `Error::InvalidMessageSize` if `out.len() < self.message_size()`.
+    /// Returns `Error::InvalidMessageSize` if `out.len() != self.message_size()`.
     ///
     /// On success, returns the number of bytes written to `out` (always
     /// `self.message_size()`).
     pub fn try_recv(&mut self, out: &mut [u8]) -> Result<usize> {
-        if out.len() < self.message_size {
+        if out.len() != self.message_size {
             return Err(Error::InvalidMessageSize);
         }
         if self.len == 0 {
@@ -180,11 +180,15 @@ mod tests {
     }
 
     #[test]
-    fn recv_rejects_small_buffer() {
+    fn recv_rejects_wrong_buffer_size() {
         let mut q = ByteQueue::new(4, 4).unwrap();
         q.try_send(&[1, 2, 3, 4]).unwrap();
-        let mut buf = [0u8; 2];
-        assert!(q.try_recv(&mut buf).is_err());
+        // Too small
+        let mut buf_small = [0u8; 2];
+        assert!(q.try_recv(&mut buf_small).is_err());
+        // Too large
+        let mut buf_large = [0u8; 8];
+        assert!(q.try_recv(&mut buf_large).is_err());
     }
 
     #[test]
