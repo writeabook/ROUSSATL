@@ -6,11 +6,11 @@
 use osal_api::time::Timeout;
 use osal_api::traits::mutex::Mutex as _;
 
-use crate::factory::BackendFactory;
+use crate::factory::MutexFactory;
 
 /// Lock succeeds on an uncontended mutex; guard provides access;
 /// drop releases the lock.
-pub fn lock_unlock<F: BackendFactory>(factory: &F) {
+pub fn lock_unlock<F: MutexFactory>(factory: &F) {
     let m = factory.create_mutex(42).unwrap();
     {
         let guard = m.lock(Timeout::NoWait).unwrap();
@@ -21,7 +21,7 @@ pub fn lock_unlock<F: BackendFactory>(factory: &F) {
 }
 
 /// Non-blocking lock fails when the mutex is held by another context.
-pub fn try_lock_fails_when_held<F: BackendFactory>(factory: &F) {
+pub fn try_lock_fails_when_held<F: MutexFactory>(factory: &F) {
     let m = factory.create_mutex(0).unwrap();
     let _guard = m.lock(Timeout::NoWait).unwrap();
     // Second lock on same mutex from same task — recursive.
@@ -30,7 +30,7 @@ pub fn try_lock_fails_when_held<F: BackendFactory>(factory: &F) {
 }
 
 /// `Timeout::Forever` blocks until the lock is acquired.
-pub fn lock_forever<F: BackendFactory>(factory: &F) {
+pub fn lock_forever<F: MutexFactory>(factory: &F) {
     let m = factory.create_mutex(0).unwrap();
     let guard = m.lock(Timeout::Forever).unwrap();
     assert_eq!(*guard, 0);
@@ -38,7 +38,7 @@ pub fn lock_forever<F: BackendFactory>(factory: &F) {
 }
 
 /// `Timeout::NoWait` succeeds when uncontended.
-pub fn lock_no_wait<F: BackendFactory>(factory: &F) {
+pub fn lock_no_wait<F: MutexFactory>(factory: &F) {
     let m = factory.create_mutex(100).unwrap();
     let guard = m.lock(Timeout::NoWait).unwrap();
     assert_eq!(*guard, 100);
@@ -47,7 +47,7 @@ pub fn lock_no_wait<F: BackendFactory>(factory: &F) {
 
 /// Recursive lock: the owning task can lock the same mutex
 /// multiple times without deadlocking.
-pub fn recursive_lock<F: BackendFactory>(factory: &F) {
+pub fn recursive_lock<F: MutexFactory>(factory: &F) {
     let m = factory.create_mutex(0).unwrap();
     let g1 = m.lock(Timeout::NoWait).unwrap();
     let g2 = m.lock(Timeout::NoWait).unwrap();
@@ -60,7 +60,7 @@ pub fn recursive_lock<F: BackendFactory>(factory: &F) {
 }
 
 /// Guard drop releases exactly one recursion level.
-pub fn guard_drop_releases_one_level<F: BackendFactory>(factory: &F) {
+pub fn guard_drop_releases_one_level<F: MutexFactory>(factory: &F) {
     let m = factory.create_mutex(0).unwrap();
     let _outer = m.lock(Timeout::NoWait).unwrap();
     {
@@ -72,7 +72,7 @@ pub fn guard_drop_releases_one_level<F: BackendFactory>(factory: &F) {
 }
 
 /// All contract tests for the Mutex trait.
-pub fn run_all<F: BackendFactory>(factory: &F) {
+pub fn run_all<F: MutexFactory>(factory: &F) {
     lock_unlock::<F>(factory);
     try_lock_fails_when_held::<F>(factory);
     lock_forever::<F>(factory);

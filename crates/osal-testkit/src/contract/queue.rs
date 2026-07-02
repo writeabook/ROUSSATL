@@ -7,10 +7,10 @@ use osal_api::error::Error;
 use osal_api::time::Timeout;
 use osal_api::traits::queue::Queue as _;
 
-use crate::factory::BackendFactory;
+use crate::factory::QueueFactory;
 
 /// Create with valid parameters.
-pub fn create<F: BackendFactory>(factory: &F) {
+pub fn create<F: QueueFactory>(factory: &F) {
     let q = factory.create_queue(8, 4).unwrap();
     assert_eq!(q.capacity(), 8);
     assert_eq!(q.msg_size(), 4);
@@ -20,19 +20,19 @@ pub fn create<F: BackendFactory>(factory: &F) {
 }
 
 /// Reject zero capacity.
-pub fn reject_zero_capacity<F: BackendFactory>(factory: &F) {
+pub fn reject_zero_capacity<F: QueueFactory>(factory: &F) {
     let result = factory.create_queue(0, 4);
     assert!(matches!(result, Err(Error::InvalidParameter)));
 }
 
 /// Reject zero message size.
-pub fn reject_zero_msg_size<F: BackendFactory>(factory: &F) {
+pub fn reject_zero_msg_size<F: QueueFactory>(factory: &F) {
     let result = factory.create_queue(8, 0);
     assert!(matches!(result, Err(Error::InvalidParameter)));
 }
 
 /// Send and receive a single message; bytes preserved.
-pub fn send_recv_roundtrip<F: BackendFactory>(factory: &F) {
+pub fn send_recv_roundtrip<F: QueueFactory>(factory: &F) {
     let q = factory.create_queue(4, 4).unwrap();
     let data = [1u8, 2, 3, 4];
     q.send(&data, Timeout::NoWait).unwrap();
@@ -43,7 +43,7 @@ pub fn send_recv_roundtrip<F: BackendFactory>(factory: &F) {
 }
 
 /// Messages are received in FIFO order.
-pub fn fifo_order<F: BackendFactory>(factory: &F) {
+pub fn fifo_order<F: QueueFactory>(factory: &F) {
     let q = factory.create_queue(4, 2).unwrap();
     q.send(&[1u8, 2], Timeout::NoWait).unwrap();
     q.send(&[3u8, 4], Timeout::NoWait).unwrap();
@@ -56,7 +56,7 @@ pub fn fifo_order<F: BackendFactory>(factory: &F) {
 }
 
 /// Non-blocking send on full queue returns QueueFull.
-pub fn send_full_no_wait<F: BackendFactory>(factory: &F) {
+pub fn send_full_no_wait<F: QueueFactory>(factory: &F) {
     let q = factory.create_queue(1, 1).unwrap();
     q.send(&[42], Timeout::NoWait).unwrap();
     let result = q.send(&[99], Timeout::NoWait);
@@ -64,7 +64,7 @@ pub fn send_full_no_wait<F: BackendFactory>(factory: &F) {
 }
 
 /// Non-blocking recv on empty queue returns QueueEmpty.
-pub fn recv_empty_no_wait<F: BackendFactory>(factory: &F) {
+pub fn recv_empty_no_wait<F: QueueFactory>(factory: &F) {
     let q = factory.create_queue(4, 2).unwrap();
     let mut buf = [0u8; 2];
     let result = q.recv(&mut buf, Timeout::NoWait);
@@ -72,14 +72,14 @@ pub fn recv_empty_no_wait<F: BackendFactory>(factory: &F) {
 }
 
 /// Send with wrong message size returns InvalidMessageSize.
-pub fn send_wrong_size<F: BackendFactory>(factory: &F) {
+pub fn send_wrong_size<F: QueueFactory>(factory: &F) {
     let q = factory.create_queue(4, 4).unwrap();
     let result = q.send(&[1u8, 2], Timeout::NoWait);
     assert!(matches!(result, Err(Error::InvalidMessageSize)));
 }
 
 /// Recv with wrong buffer size returns InvalidMessageSize.
-pub fn recv_wrong_size<F: BackendFactory>(factory: &F) {
+pub fn recv_wrong_size<F: QueueFactory>(factory: &F) {
     let q = factory.create_queue(4, 2).unwrap();
     q.send(&[1u8, 2], Timeout::NoWait).unwrap();
     let mut buf = [0u8; 4];
@@ -88,7 +88,7 @@ pub fn recv_wrong_size<F: BackendFactory>(factory: &F) {
 }
 
 /// After close, send returns QueueClosed.
-pub fn send_after_close<F: BackendFactory>(factory: &F) {
+pub fn send_after_close<F: QueueFactory>(factory: &F) {
     let q = factory.create_queue(4, 2).unwrap();
     q.close();
     let result = q.send(&[1u8, 2], Timeout::NoWait);
@@ -96,7 +96,7 @@ pub fn send_after_close<F: BackendFactory>(factory: &F) {
 }
 
 /// After close, recv on empty returns QueueClosed.
-pub fn recv_empty_after_close<F: BackendFactory>(factory: &F) {
+pub fn recv_empty_after_close<F: QueueFactory>(factory: &F) {
     let q = factory.create_queue(4, 2).unwrap();
     q.close();
     let mut buf = [0u8; 2];
@@ -106,7 +106,7 @@ pub fn recv_empty_after_close<F: BackendFactory>(factory: &F) {
 
 /// After close, recv drains remaining messages before returning
 /// QueueClosed.
-pub fn recv_drains_after_close<F: BackendFactory>(factory: &F) {
+pub fn recv_drains_after_close<F: QueueFactory>(factory: &F) {
     let q = factory.create_queue(4, 2).unwrap();
     q.send(&[1u8, 2], Timeout::NoWait).unwrap();
     q.send(&[3u8, 4], Timeout::NoWait).unwrap();
@@ -125,21 +125,21 @@ pub fn recv_drains_after_close<F: BackendFactory>(factory: &F) {
 }
 
 /// Close is idempotent.
-pub fn close_idempotent<F: BackendFactory>(factory: &F) {
+pub fn close_idempotent<F: QueueFactory>(factory: &F) {
     let q = factory.create_queue(4, 2).unwrap();
     q.close();
     q.close(); // Must not panic or double-free.
 }
 
 /// ISR send succeeds when not full.
-pub fn isr_send<F: BackendFactory>(factory: &F) {
+pub fn isr_send<F: QueueFactory>(factory: &F) {
     let q = factory.create_queue(4, 2).unwrap();
     q.isr_send(&[1u8, 2]).unwrap();
     assert_eq!(q.len(), 1);
 }
 
 /// ISR recv succeeds when not empty.
-pub fn isr_recv<F: BackendFactory>(factory: &F) {
+pub fn isr_recv<F: QueueFactory>(factory: &F) {
     let q = factory.create_queue(4, 2).unwrap();
     q.isr_send(&[1u8, 2]).unwrap();
     let mut buf = [0u8; 2];
@@ -148,7 +148,7 @@ pub fn isr_recv<F: BackendFactory>(factory: &F) {
 }
 
 /// Recv timeout on empty queue.
-pub fn recv_timeout<F: BackendFactory>(factory: &F) {
+pub fn recv_timeout<F: QueueFactory>(factory: &F) {
     let q = factory.create_queue(4, 2).unwrap();
     let mut buf = [0u8; 2];
     let result = q.recv(
@@ -163,7 +163,7 @@ pub fn recv_timeout<F: BackendFactory>(factory: &F) {
 // ---------------------------------------------------------------------------
 
 /// Run all queue contract tests.
-pub fn run_all<F: BackendFactory>(factory: &F) {
+pub fn run_all<F: QueueFactory>(factory: &F) {
     create::<F>(factory);
     reject_zero_capacity::<F>(factory);
     reject_zero_msg_size::<F>(factory);
