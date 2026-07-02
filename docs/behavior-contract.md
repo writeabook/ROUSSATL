@@ -1,4 +1,4 @@
-# OSAL Backend Contract
+# OSAL Behavior Contract
 
 ## 1. Purpose
 
@@ -89,6 +89,8 @@ All fallible operations return `Result<T, osal_api::Error>`.
 | `Timeout` | Operation exceeded time limit | `Timeout::After(d)` expired |
 | `QueueFull` | Queue at capacity | Non-blocking send on full queue |
 | `QueueEmpty` | Queue has no messages | Non-blocking recv on empty queue |
+| `QueueClosed` | Queue has been explicitly closed | Send after close; recv on closed empty queue |
+| `InvalidMessageSize` | Queue message size mismatch | send/recv buffer length != msg_size |
 | `LockFailed` | Could not acquire lock | Mutex held by another context |
 | `NotFound` | Resource not found | Invalid handle or ID |
 | `InvalidParameter` | Argument out of valid range | Zero-length name, count > max |
@@ -185,9 +187,13 @@ Create ──→ (Start) ──→ Use ──→ Delete / Drop
 
 ### Deletion
 
-- `Drop` (or an explicit `delete`/`close` method if asynchronous
-  cleanup is needed) releases all resources.
-- Tasks blocked on a deleted object must be woken with an error.
+- `Drop` releases resources when no operation is actively borrowing
+  the object. `Drop` must not block indefinitely.
+- Explicit `close()` / `delete` operations (when provided) are
+  responsible for waking blocked waiters before the underlying
+  resource is released.
+- Last-handle `Drop` is resource cleanup only; wake semantics are
+  defined in `object-lifetime.md`.
 - After deletion, the object's handle (if any) becomes invalid.
 
 ---
@@ -492,8 +498,9 @@ impl Queue {
 - `close()`:
   - Marks the queue as closed.
   - Wakes all blocked senders (they return `Error::QueueClosed`).
-  - Wakes all blocked receivers **only if the queue is empty**;
-    receivers blocked on a non-empty queue continue to drain.
+  - Wakes blocked receivers if the queue is empty.
+  - If messages are already queued at close time, subsequent `recv`
+    calls continue to drain them.
   - Does **not** discard already enqueued messages.
   - Idempotent: calling `close()` multiple times is safe.
 

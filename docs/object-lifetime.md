@@ -101,8 +101,9 @@ A `Queue` exists until explicitly closed or dropped.
 Closing a queue shall:
 - Reject future `send` operations (always returns `Error::QueueClosed`).
 - Wake all blocked senders (they return `Error::QueueClosed`).
-- Wake blocked receivers **only if the queue is empty**; receivers
-  blocked on a non-empty queue continue to drain.
+- Wake blocked receivers if the queue is empty. If messages are
+  already queued at close time, subsequent `recv` calls continue
+  to drain them.
 - Preserve already enqueued messages — they remain readable via `recv`
   until the queue is empty or dropped.
 
