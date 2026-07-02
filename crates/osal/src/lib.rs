@@ -52,6 +52,9 @@ compile_error!("Only one OSAL backend may be enabled at a time.");
 /// common types.
 pub use osal_api;
 
+/// Backend type aliases — concrete types from the active backend.
+pub mod backend;
+
 /// Commonly used types, re-exported for convenience.
 ///
 /// ```ignore
@@ -59,4 +62,6 @@ pub use osal_api;
 /// ```
 pub mod prelude {
     pub use osal_api::prelude::*;
+    pub use crate::backend::Queue;
+    pub use osal_api::traits::queue::Queue as _;
 }
