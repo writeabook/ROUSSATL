@@ -37,6 +37,10 @@ pub enum Error {
     InvalidMessageSize,
     /// Failed to acquire the lock.
     LockFailed,
+    /// Count or capacity overflow — a resource has reached its maximum.
+    ///
+    /// For example, signaling a semaphore that is already at `max_count`.
+    Overflow,
     /// The requested resource was not found.
     NotFound,
     /// An invalid parameter was provided.

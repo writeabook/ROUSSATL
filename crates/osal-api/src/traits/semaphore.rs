@@ -52,8 +52,8 @@ pub trait CountingSemaphore: Sized {
 
     /// Increment the counter, waking one blocked acquirer if any.
     ///
-    /// Returns `Error::InvalidParameter` if `count` is already at
-    /// `max_count` (the semaphore is full).
+    /// Returns `Error::Overflow` if `count` is already at `max_count`
+    /// (the semaphore is full).
     fn release(&self) -> Result<()>;
 
     /// Non-blocking acquire, safe to call from ISR context.
@@ -102,7 +102,7 @@ pub trait BinarySemaphore: Sized {
     fn acquire(&self, timeout: Timeout) -> Result<()>;
 
     /// Increment the counter to 1 if currently 0. Returns
-    /// `Error::InvalidParameter` if already signaled.
+    /// `Error::Overflow` if already signaled.
     fn release(&self) -> Result<()>;
 
     /// Return `true` if the semaphore is currently signaled (count == 1).

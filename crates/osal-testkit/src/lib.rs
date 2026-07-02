@@ -1,20 +1,15 @@
-//! Testing utilities for OSAL backends.
+//! Testing infrastructure for OSAL backends.
 //!
-//! Provides shared infrastructure for testing OSAL implementations:
+//! Provides:
 //!
-//! - **Contract test harness**: Run the same behavior tests against
-//!   every backend
-//! - **Assertion helpers**: Common patterns for verifying OSAL
-//!   behavior
-//! - **Fake clock**: Deterministic time for reproducible tests
-//! - **Fault injection**: Test error handling paths
+//! - **[`BackendFactory`]** — trait for creating primitives in a
+//!   backend-agnostic way.
+//! - **[`contract`]** — generic contract test functions that run
+//!   against any backend implementing `BackendFactory`.
+//! - **[`assertions`]** — no-std-compatible assertion macros.
 
 #![no_std]
 
-extern crate alloc;
-
-// Modules to be populated in later phases:
-// pub mod contract;
-// pub mod assertions;
-// pub mod fake_clock;
-// pub mod fault;
+pub mod assertions;
+pub mod contract;
+pub mod factory;
