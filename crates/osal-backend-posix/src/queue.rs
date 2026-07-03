@@ -13,7 +13,7 @@ use osal_api::traits::queue::Queue;
 use osal_portable::byte_queue::ByteQueue;
 use osal_shared::validation;
 
-use crate::sys::condvar::PosixCondvar;
+use crate::sys::condvar::{self, PosixCondvar};
 use crate::sys::mutex::PosixMutex;
 
 // ---------------------------------------------------------------------------
@@ -28,7 +28,6 @@ struct QueueInner {
     closed: UnsafeCell<bool>,
 }
 
-// Safety: all access to buffer/closed is protected by mutex.
 unsafe impl Send for QueueInner {}
 unsafe impl Sync for QueueInner {}
 
@@ -36,10 +35,6 @@ unsafe impl Sync for QueueInner {}
 // Public type
 // ---------------------------------------------------------------------------
 
-/// A POSIX queue backed by pthread mutex + condvar.
-///
-/// Uses `Arc` internally so cloned handles share the same backend
-/// resource.
 pub struct PosixQueue {
     inner: Arc<QueueInner>,
 }
@@ -53,7 +48,6 @@ impl Clone for PosixQueue {
 }
 
 impl PosixQueue {
-    /// Create a new POSIX queue.
     pub fn new(capacity: usize, msg_size: usize) -> Result<Self> {
         validation::validate_queue_capacity(capacity)?;
         validation::validate_queue_message_size(msg_size)?;
@@ -91,43 +85,155 @@ impl Queue for PosixQueue {
     }
 
     fn send(&self, data: &[u8], timeout: Timeout) -> Result<()> {
+        validation::validate_send_message_size(self.msg_size(), data.len())?;
         self.inner.mutex.lock()?;
-        let result = if self.is_closed() {
-            Err(Error::QueueClosed)
-        } else {
-            match timeout {
-                Timeout::NoWait => self.buffer().try_send(data),
-                Timeout::After(_) | Timeout::Forever => {
+
+        if self.is_closed() {
+            self.inner.mutex.unlock()?;
+            return Err(Error::QueueClosed);
+        }
+
+        match timeout {
+            Timeout::NoWait => {
+                let result = self.buffer().try_send(data);
+                if result.is_ok() {
+                    let _ = self.inner.not_empty.signal();
+                }
+                self.inner.mutex.unlock()?;
+                result
+            }
+            Timeout::After(d) => {
+                let deadline = condvar::abs_deadline(d);
+                loop {
+                    if self.is_closed() {
+                        self.inner.mutex.unlock()?;
+                        return Err(Error::QueueClosed);
+                    }
                     match self.buffer().try_send(data) {
-                        Err(Error::QueueFull) => Err(Error::Timeout),
-                        other => other,
+                        Ok(()) => {
+                            let _ = self.inner.not_empty.signal();
+                            self.inner.mutex.unlock()?;
+                            return Ok(());
+                        }
+                        Err(Error::QueueFull) => {
+                            // Wait on not_full with deadline.
+                            match self.inner.not_full.timed_wait(&self.inner.mutex, &deadline) {
+                                Err(Error::Timeout) => {
+                                    self.inner.mutex.unlock()?;
+                                    return Err(Error::Timeout);
+                                }
+                                Err(e) => {
+                                    self.inner.mutex.unlock()?;
+                                    return Err(e);
+                                }
+                                Ok(()) => { /* retry */ }
+                            }
+                        }
+                        Err(e) => {
+                            self.inner.mutex.unlock()?;
+                            return Err(e);
+                        }
                     }
                 }
             }
-        };
-        if result.is_ok() {
-            let _ = self.inner.not_empty.signal();
+            Timeout::Forever => loop {
+                if self.is_closed() {
+                    self.inner.mutex.unlock()?;
+                    return Err(Error::QueueClosed);
+                }
+                match self.buffer().try_send(data) {
+                    Ok(()) => {
+                        let _ = self.inner.not_empty.signal();
+                        self.inner.mutex.unlock()?;
+                        return Ok(());
+                    }
+                    Err(Error::QueueFull) => {
+                        self.inner.not_full.wait(&self.inner.mutex)?;
+                    }
+                    Err(e) => {
+                        self.inner.mutex.unlock()?;
+                        return Err(e);
+                    }
+                }
+            },
         }
-        self.inner.mutex.unlock()?;
-        result
     }
 
     fn recv(&self, buffer: &mut [u8], timeout: Timeout) -> Result<()> {
+        validation::validate_recv_buffer_size(self.msg_size(), buffer.len())?;
         self.inner.mutex.lock()?;
-        let result = match timeout {
-            Timeout::NoWait => self.buffer().try_recv(buffer).map(|_| ()),
-            Timeout::After(_) | Timeout::Forever => {
-                match self.buffer().try_recv(buffer) {
-                    Err(Error::QueueEmpty) => Err(Error::Timeout),
-                    other => other.map(|_| ()),
+
+        match timeout {
+            Timeout::NoWait => {
+                let result = self.buffer().try_recv(buffer).map(|_| ());
+                if result.is_ok() {
+                    let _ = self.inner.not_full.signal();
+                }
+                self.inner.mutex.unlock()?;
+                result
+            }
+            Timeout::After(d) => {
+                let deadline = condvar::abs_deadline(d);
+                loop {
+                    if self.is_closed() && self.buffer().len() == 0 {
+                        self.inner.mutex.unlock()?;
+                        return Err(Error::QueueClosed);
+                    }
+                    match self.buffer().try_recv(buffer) {
+                        Ok(_) => {
+                            let _ = self.inner.not_full.signal();
+                            self.inner.mutex.unlock()?;
+                            return Ok(());
+                        }
+                        Err(Error::QueueEmpty) => {
+                            if self.is_closed() {
+                                self.inner.mutex.unlock()?;
+                                return Err(Error::QueueClosed);
+                            }
+                            match self.inner.not_empty.timed_wait(&self.inner.mutex, &deadline) {
+                                Err(Error::Timeout) => {
+                                    self.inner.mutex.unlock()?;
+                                    return Err(Error::Timeout);
+                                }
+                                Err(e) => {
+                                    self.inner.mutex.unlock()?;
+                                    return Err(e);
+                                }
+                                Ok(()) => { /* retry */ }
+                            }
+                        }
+                        Err(e) => {
+                            self.inner.mutex.unlock()?;
+                            return Err(e);
+                        }
+                    }
                 }
             }
-        };
-        if result.is_ok() {
-            let _ = self.inner.not_full.signal();
+            Timeout::Forever => loop {
+                if self.is_closed() && self.buffer().len() == 0 {
+                    self.inner.mutex.unlock()?;
+                    return Err(Error::QueueClosed);
+                }
+                match self.buffer().try_recv(buffer) {
+                    Ok(_) => {
+                        let _ = self.inner.not_full.signal();
+                        self.inner.mutex.unlock()?;
+                        return Ok(());
+                    }
+                    Err(Error::QueueEmpty) => {
+                        if self.is_closed() {
+                            self.inner.mutex.unlock()?;
+                            return Err(Error::QueueClosed);
+                        }
+                        self.inner.not_empty.wait(&self.inner.mutex)?;
+                    }
+                    Err(e) => {
+                        self.inner.mutex.unlock()?;
+                        return Err(e);
+                    }
+                }
+            },
         }
-        self.inner.mutex.unlock()?;
-        result
     }
 
     fn close(&self) {
@@ -173,7 +279,6 @@ impl Queue for PosixQueue {
 // Factory (testkit)
 // ---------------------------------------------------------------------------
 
-/// Factory for creating POSIX queues.
 pub struct PosixQueueFactory;
 
 #[cfg(feature = "testkit")]
