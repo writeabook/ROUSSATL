@@ -12,6 +12,7 @@ pub fn monotonic_now_raw() -> libc::timespec {
 }
 
 /// Return the current monotonic time as a `Duration`.
+#[allow(dead_code)]
 pub fn monotonic_now() -> Duration {
     let ts = monotonic_now_raw();
     Duration::new(ts.tv_sec as u64, ts.tv_nsec as u32)

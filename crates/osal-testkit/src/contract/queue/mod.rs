@@ -8,10 +8,10 @@
 //!
 //! See `docs/behavior-contract.md#11-queue-contract` for the full spec.
 
-mod creation;
-mod fifo;
-mod error_precedence;
 mod close;
+mod creation;
+mod error_precedence;
+mod fifo;
 mod timeout;
 
 use crate::factory::QueueFactory;

@@ -1,8 +1,8 @@
 //! Queue creation contract tests.
 
+use crate::factory::QueueFactory;
 use osal_api::error::Error;
 use osal_api::traits::queue::Queue as _;
-use crate::factory::QueueFactory;
 
 /// Valid creation returns correct metadata.
 pub fn create_valid<F: QueueFactory>(factory: &F) {

@@ -25,8 +25,12 @@ use crate::factory::TimerFactory;
 
 /// Creating a timer with a zero period fails.
 pub fn new_rejects_zero_period<F: TimerFactory>(factory: &F) {
-    let result =
-        factory.create_timer("zero", Duration::ZERO, TimerMode::OneShot, factory.dummy_callback());
+    let result = factory.create_timer(
+        "zero",
+        Duration::ZERO,
+        TimerMode::OneShot,
+        factory.dummy_callback(),
+    );
     assert!(matches!(result, Err(Error::InvalidParameter)));
 }
 

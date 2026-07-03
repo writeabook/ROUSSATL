@@ -2,10 +2,10 @@
 
 use core::time::Duration;
 
+use crate::factory::QueueFactory;
 use osal_api::error::Error;
 use osal_api::time::Timeout;
 use osal_api::traits::queue::Queue as _;
-use crate::factory::QueueFactory;
 
 /// Send with After on full queue returns Timeout.
 pub fn send_timeout_when_full<F: QueueFactory>(factory: &F) {

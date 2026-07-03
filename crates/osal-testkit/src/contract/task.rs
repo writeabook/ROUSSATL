@@ -62,11 +62,7 @@ pub fn join_returns_after_task_exit<F: TaskFactory>(factory: &F) {
 
 /// `join()` succeeds immediately for an already-exited task.
 pub fn join_after_exit_returns_immediately<F: TaskFactory>(factory: &F) {
-    let task = factory
-        .task_builder()
-        .name("quick")
-        .spawn(|| {})
-        .unwrap();
+    let task = factory.task_builder().name("quick").spawn(|| {}).unwrap();
 
     // First join — wait for exit.
     task.join(Timeout::Forever).unwrap();

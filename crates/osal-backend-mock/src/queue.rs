@@ -40,7 +40,11 @@ struct MockQueueInner {
 }
 
 impl MockQueueInner {
-    fn new(capacity: usize, msg_size: usize, faults: Option<Rc<RefCell<FaultState>>>) -> Result<Self> {
+    fn new(
+        capacity: usize,
+        msg_size: usize,
+        faults: Option<Rc<RefCell<FaultState>>>,
+    ) -> Result<Self> {
         validation::validate_queue_capacity(capacity)?;
         validation::validate_queue_message_size(msg_size)?;
         Ok(Self {
@@ -89,7 +93,11 @@ impl MockQueue {
             return Err(fault);
         }
         Ok(Self {
-            inner: Rc::new(RefCell::new(MockQueueInner::new(capacity, msg_size, Some(faults))?)),
+            inner: Rc::new(RefCell::new(MockQueueInner::new(
+                capacity,
+                msg_size,
+                Some(faults),
+            )?)),
         })
     }
 
@@ -168,11 +176,13 @@ impl osal_testkit::factory::QueueFactory for MockQueueFactory {
 
 /// Factory with shared fault state for queue + fault contract tests.
 pub struct MockFaultyQueueFactory {
+    #[allow(dead_code)]
     faults: Rc<RefCell<FaultState>>,
 }
 
 impl MockFaultyQueueFactory {
     /// Create a new factory with empty fault state.
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
             faults: Rc::new(RefCell::new(FaultState::default())),

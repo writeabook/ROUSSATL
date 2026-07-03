@@ -37,6 +37,7 @@ pub struct MockFaultFactory {
 
 impl MockFaultFactory {
     /// Create a new fault factory with empty fault state.
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
             state: Rc::new(RefCell::new(FaultState::default())),

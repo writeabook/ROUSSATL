@@ -39,11 +39,7 @@ pub enum WaitOutcome<T> {
 /// `would_block_err` is the error variant that indicates the operation
 /// would block (e.g. `Error::QueueFull` for send, `Error::QueueEmpty`
 /// for recv/acquire).
-pub fn apply_timeout<T>(
-    timeout: Timeout,
-    raw: Result<T>,
-    would_block_err: Error,
-) -> Result<T> {
+pub fn apply_timeout<T>(timeout: Timeout, raw: Result<T>, would_block_err: Error) -> Result<T> {
     match timeout {
         Timeout::NoWait => raw,
         Timeout::After(_) => match raw {

@@ -37,9 +37,7 @@ impl ByteQueue {
             return Err(Error::InvalidParameter);
         }
 
-        let storage_size = capacity
-            .checked_mul(message_size)
-            .ok_or(Error::Overflow)?;
+        let storage_size = capacity.checked_mul(message_size).ok_or(Error::Overflow)?;
 
         let mut storage = Vec::new();
         storage
@@ -157,8 +155,7 @@ impl ByteQueue {
             };
         }
         let offset = self.head * self.message_size;
-        out[..self.message_size]
-            .copy_from_slice(&self.storage[offset..offset + self.message_size]);
+        out[..self.message_size].copy_from_slice(&self.storage[offset..offset + self.message_size]);
         self.head = (self.head + 1) % self.capacity;
         self.len -= 1;
 
@@ -177,27 +174,18 @@ mod tests {
 
     #[test]
     fn new_rejects_zero_capacity() {
-        assert_eq!(
-            ByteQueue::new(0, 4).unwrap_err(),
-            Error::InvalidParameter
-        );
+        assert_eq!(ByteQueue::new(0, 4).unwrap_err(), Error::InvalidParameter);
     }
 
     #[test]
     fn new_rejects_zero_message_size() {
-        assert_eq!(
-            ByteQueue::new(4, 0).unwrap_err(),
-            Error::InvalidParameter
-        );
+        assert_eq!(ByteQueue::new(4, 0).unwrap_err(), Error::InvalidParameter);
     }
 
     #[test]
     fn new_rejects_capacity_overflow() {
         // usize::MAX * 2 overflows on any platform
-        assert_eq!(
-            ByteQueue::new(usize::MAX, 2).unwrap_err(),
-            Error::Overflow
-        );
+        assert_eq!(ByteQueue::new(usize::MAX, 2).unwrap_err(), Error::Overflow);
     }
 
     #[test]
@@ -265,10 +253,7 @@ mod tests {
     #[test]
     fn send_rejects_wrong_size() {
         let mut q = ByteQueue::new(4, 4).unwrap();
-        assert_eq!(
-            q.try_send(&[1, 2]).unwrap_err(),
-            Error::InvalidMessageSize
-        );
+        assert_eq!(q.try_send(&[1, 2]).unwrap_err(), Error::InvalidMessageSize);
     }
 
     #[test]
@@ -310,10 +295,7 @@ mod tests {
         // Parameter validation takes priority over object state.
         let mut q = ByteQueue::new(4, 4).unwrap();
         q.close();
-        assert_eq!(
-            q.try_send(&[1, 2]).unwrap_err(),
-            Error::InvalidMessageSize
-        );
+        assert_eq!(q.try_send(&[1, 2]).unwrap_err(), Error::InvalidMessageSize);
     }
 
     #[test]

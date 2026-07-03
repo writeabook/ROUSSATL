@@ -120,6 +120,7 @@ pub struct PosixMutexGuard<'a> {
 
 impl PosixMutexGuard<'_> {
     /// Return a reference to the underlying mutex.
+    #[allow(dead_code)]
     pub(crate) fn mutex(&self) -> &PosixMutex {
         self.mutex
     }

@@ -67,6 +67,7 @@ impl PosixQueue {
     }
 
     /// Access the buffer (caller must hold the lock).
+    #[allow(clippy::mut_from_ref)]
     fn buffer_locked(&self, _guard: &PosixMutexGuard<'_>) -> &mut ByteQueue {
         unsafe { &mut *self.inner.buffer.get() }
     }
@@ -159,7 +160,7 @@ impl Queue for PosixQueue {
                 let deadline = condvar::abs_deadline(d);
                 loop {
                     let is_closed = self.buffer_locked(&guard).is_closed();
-                    let is_empty = self.buffer_locked(&guard).len() == 0;
+                    let is_empty = self.buffer_locked(&guard).is_empty();
 
                     if is_closed && is_empty {
                         return Err(Error::QueueClosed);
@@ -185,7 +186,7 @@ impl Queue for PosixQueue {
             }
             Timeout::Forever => loop {
                 let is_closed = self.buffer_locked(&guard).is_closed();
-                let is_empty = self.buffer_locked(&guard).len() == 0;
+                let is_empty = self.buffer_locked(&guard).is_empty();
 
                 if is_closed && is_empty {
                     return Err(Error::QueueClosed);

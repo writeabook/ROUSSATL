@@ -1,9 +1,9 @@
 //! Close-drain semantics contract tests.
 
+use crate::factory::QueueFactory;
 use osal_api::error::Error;
 use osal_api::time::Timeout;
 use osal_api::traits::queue::Queue as _;
-use crate::factory::QueueFactory;
 
 /// After close, send returns QueueClosed.
 pub fn send_after_close<F: QueueFactory>(factory: &F) {

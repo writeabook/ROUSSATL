@@ -65,7 +65,8 @@ fn recv_after_returns_timeout() {
     let q = PosixQueue::new(4, 4).unwrap();
     let mut buf = [0u8; 4];
     assert_eq!(
-        q.recv(&mut buf, Timeout::After(Duration::from_millis(1))).unwrap_err(),
+        q.recv(&mut buf, Timeout::After(Duration::from_millis(1)))
+            .unwrap_err(),
         Error::Timeout
     );
 }
@@ -76,7 +77,8 @@ fn send_after_returns_timeout_when_full() {
     let q = PosixQueue::new(1, 4).unwrap();
     q.send(&[1, 2, 3, 4], Timeout::NoWait).unwrap();
     assert_eq!(
-        q.send(&[5, 6, 7, 8], Timeout::After(Duration::from_millis(1))).unwrap_err(),
+        q.send(&[5, 6, 7, 8], Timeout::After(Duration::from_millis(1)))
+            .unwrap_err(),
         Error::Timeout
     );
 }

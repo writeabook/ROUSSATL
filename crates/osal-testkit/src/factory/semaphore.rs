@@ -11,11 +11,7 @@ pub trait SemaphoreFactory {
     type BinarySemaphore: BinarySemaphore;
 
     /// Create a counting semaphore with the given bounds.
-    fn create_counting_semaphore(
-        &self,
-        max: u32,
-        initial: u32,
-    ) -> Result<Self::CountingSemaphore>;
+    fn create_counting_semaphore(&self, max: u32, initial: u32) -> Result<Self::CountingSemaphore>;
 
     /// Create a binary semaphore (initial count = 0).
     fn create_binary_semaphore(&self) -> Result<Self::BinarySemaphore>;

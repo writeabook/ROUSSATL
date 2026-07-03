@@ -58,10 +58,7 @@ impl PosixCondvar {
         let attr = CondAttr::new()?;
 
         errno::check_ret(unsafe {
-            libc::pthread_condattr_setclock(
-                &raw const attr.inner as *mut _,
-                libc::CLOCK_MONOTONIC,
-            )
+            libc::pthread_condattr_setclock(&raw const attr.inner as *mut _, libc::CLOCK_MONOTONIC)
         })?;
 
         let c = Self {
@@ -83,9 +80,7 @@ impl PosixCondvar {
     /// The guard must be locked. On return the guard is still locked
     /// (pthread_cond_wait atomically releases and reacquires the mutex).
     pub fn wait(&self, guard: &mut PosixMutexGuard<'_>) -> Result<()> {
-        errno::check_ret(unsafe {
-            libc::pthread_cond_wait(self.raw_ptr(), guard.raw_mutex_ptr())
-        })
+        errno::check_ret(unsafe { libc::pthread_cond_wait(self.raw_ptr(), guard.raw_mutex_ptr()) })
     }
 
     /// Timed wait with absolute deadline.

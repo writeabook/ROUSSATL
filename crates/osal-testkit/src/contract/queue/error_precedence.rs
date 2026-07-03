@@ -2,10 +2,10 @@
 //!
 //! Verifies the precedence order: InvalidMessageSize > QueueClosed.
 
+use crate::factory::QueueFactory;
 use osal_api::error::Error;
 use osal_api::time::Timeout;
 use osal_api::traits::queue::Queue as _;
-use crate::factory::QueueFactory;
 
 /// Wrong send size returns InvalidMessageSize.
 pub fn send_wrong_size<F: QueueFactory>(factory: &F) {
