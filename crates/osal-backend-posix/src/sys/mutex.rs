@@ -42,7 +42,56 @@ impl PosixMutex {
     pub fn unlock(&self) -> Result<()> {
         errno::check_ret(unsafe { libc::pthread_mutex_unlock(&raw const self.inner as *mut _) })
     }
+
+    /// Lock and return a RAII guard that unlocks on drop.
+    pub fn lock_guard(&self) -> Result<PosixMutexGuard<'_>> {
+        self.lock()?;
+        Ok(PosixMutexGuard {
+            mutex: self,
+            locked: true,
+        })
+    }
+
+    /// Return a raw pointer to the inner mutex (for condvar).
+    pub(crate) fn raw_ptr(&self) -> *mut libc::pthread_mutex_t {
+        &raw const self.inner as *mut _
+    }
 }
+
+// ---------------------------------------------------------------------------
+// RAII guard
+// ---------------------------------------------------------------------------
+
+/// RAII guard that unlocks the mutex on drop.
+pub struct PosixMutexGuard<'a> {
+    mutex: &'a PosixMutex,
+    locked: bool,
+}
+
+impl PosixMutexGuard<'_> {
+    /// Return a reference to the underlying mutex.
+    pub(crate) fn mutex(&self) -> &PosixMutex {
+        self.mutex
+    }
+
+    /// Return a raw mutex pointer for condvar operations.
+    pub(crate) fn raw_mutex_ptr(&self) -> *mut libc::pthread_mutex_t {
+        self.mutex.raw_ptr()
+    }
+}
+
+impl Drop for PosixMutexGuard<'_> {
+    fn drop(&mut self) {
+        if self.locked {
+            let _ = self.mutex.unlock();
+            self.locked = false;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Drop
+// ---------------------------------------------------------------------------
 
 impl Drop for PosixMutex {
     fn drop(&mut self) {
