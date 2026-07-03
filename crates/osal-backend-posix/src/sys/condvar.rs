@@ -1,5 +1,6 @@
 //! Thin wrapper around `pthread_cond_t`.
 
+use core::cell::UnsafeCell;
 use core::time::Duration;
 
 use osal_api::error::Result;
@@ -13,22 +14,27 @@ use crate::sys::mutex::PosixMutexGuard;
 
 struct CondAttr {
     inner: libc::pthread_condattr_t,
+    initialized: bool,
 }
 
 impl CondAttr {
     fn new() -> Result<Self> {
         let mut attr = Self {
             inner: unsafe { core::mem::zeroed() },
+            initialized: false,
         };
         errno::check_ret(unsafe { libc::pthread_condattr_init(&mut attr.inner) })?;
+        attr.initialized = true;
         Ok(attr)
     }
 }
 
 impl Drop for CondAttr {
     fn drop(&mut self) {
-        unsafe {
-            libc::pthread_condattr_destroy(&mut self.inner);
+        if self.initialized {
+            unsafe {
+                libc::pthread_condattr_destroy(&mut self.inner);
+            }
         }
     }
 }
@@ -39,29 +45,37 @@ impl Drop for CondAttr {
 
 /// Wrapper around `pthread_cond_t`.
 ///
-/// Uses `CLOCK_MONOTONIC` so that `timed_wait` deadlines are
-/// consistent with `clock_gettime(CLOCK_MONOTONIC)`.
+/// Uses `CLOCK_MONOTONIC`. The inner FFI object is wrapped in
+/// [`UnsafeCell`] because pthread operations mutate it through `&self`.
 pub struct PosixCondvar {
-    inner: libc::pthread_cond_t,
+    inner: UnsafeCell<libc::pthread_cond_t>,
 }
 
 impl PosixCondvar {
     /// Create and initialize a new condition variable with
     /// `CLOCK_MONOTONIC`.
     pub fn new() -> Result<Self> {
-        let mut attr = CondAttr::new()?;
+        let attr = CondAttr::new()?;
 
         errno::check_ret(unsafe {
-            libc::pthread_condattr_setclock(&mut attr.inner, libc::CLOCK_MONOTONIC)
+            libc::pthread_condattr_setclock(
+                &raw const attr.inner as *mut _,
+                libc::CLOCK_MONOTONIC,
+            )
         })?;
 
-        let mut c = Self {
-            inner: unsafe { core::mem::zeroed() },
+        let c = Self {
+            inner: UnsafeCell::new(unsafe { core::mem::zeroed() }),
         };
 
-        errno::check_ret(unsafe { libc::pthread_cond_init(&mut c.inner, &attr.inner) })?;
+        errno::check_ret(unsafe { libc::pthread_cond_init(c.raw_ptr(), &attr.inner) })?;
 
         Ok(c)
+    }
+
+    /// Return a raw pointer to the inner condvar.
+    fn raw_ptr(&self) -> *mut libc::pthread_cond_t {
+        self.inner.get()
     }
 
     /// Wait on the condition variable.
@@ -70,10 +84,7 @@ impl PosixCondvar {
     /// (pthread_cond_wait atomically releases and reacquires the mutex).
     pub fn wait(&self, guard: &mut PosixMutexGuard<'_>) -> Result<()> {
         errno::check_ret(unsafe {
-            libc::pthread_cond_wait(
-                &raw const self.inner as *mut _,
-                guard.raw_mutex_ptr(),
-            )
+            libc::pthread_cond_wait(self.raw_ptr(), guard.raw_mutex_ptr())
         })
     }
 
@@ -87,29 +98,25 @@ impl PosixCondvar {
         abs_time: &libc::timespec,
     ) -> Result<()> {
         errno::check_ret(unsafe {
-            libc::pthread_cond_timedwait(
-                &raw const self.inner as *mut _,
-                guard.raw_mutex_ptr(),
-                abs_time,
-            )
+            libc::pthread_cond_timedwait(self.raw_ptr(), guard.raw_mutex_ptr(), abs_time)
         })
     }
 
     /// Wake one waiter.
     pub fn signal(&self) -> Result<()> {
-        errno::check_ret(unsafe { libc::pthread_cond_signal(&raw const self.inner as *mut _) })
+        errno::check_ret(unsafe { libc::pthread_cond_signal(self.raw_ptr()) })
     }
 
     /// Wake all waiters.
     pub fn broadcast(&self) -> Result<()> {
-        errno::check_ret(unsafe { libc::pthread_cond_broadcast(&raw const self.inner as *mut _) })
+        errno::check_ret(unsafe { libc::pthread_cond_broadcast(self.raw_ptr()) })
     }
 }
 
 impl Drop for PosixCondvar {
     fn drop(&mut self) {
         unsafe {
-            libc::pthread_cond_destroy(&mut self.inner);
+            libc::pthread_cond_destroy(self.raw_ptr());
         }
     }
 }
