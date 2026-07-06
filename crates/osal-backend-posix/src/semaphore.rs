@@ -25,6 +25,8 @@ struct PosixCountingSemaphoreInner {
     mutex: PosixMutex,
     condvar: PosixCondvar,
     state: UnsafeCell<CountingSemaphoreState>,
+    /// Cached at construction — immutable, no lock needed.
+    max_count: u32,
 }
 
 // Safety: the mutex ensures exclusive access to state.
@@ -51,6 +53,7 @@ impl PosixCountingSemaphore {
                     max_count,
                     initial_count,
                 )?),
+                max_count,
             }),
         })
     }
@@ -113,11 +116,7 @@ impl CountingSemaphore for PosixCountingSemaphore {
     }
 
     fn max_count(&self) -> u32 {
-        // Fixed at construction — no lock needed
-        let Ok(guard) = self.inner.mutex.lock_guard() else {
-            return 0;
-        };
-        self.state_locked(&guard).max_count()
+        self.inner.max_count
     }
 
     fn count(&self) -> Result<u32> {
