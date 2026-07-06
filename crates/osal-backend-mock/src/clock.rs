@@ -1,41 +1,34 @@
-//! Mock clock — deterministic virtual time via shared runtime.
+//! Mock clock — deterministic virtual time via thread-local runtime.
 
-use alloc::boxed::Box;
+use core::cell::RefCell;
 use core::time::Duration;
 
 use osal_api::traits::clock::Clock;
 
 use crate::time_runtime::MockTimeRuntime;
 
-// Raw pointer for single-threaded mock access. Tests are serialized.
-static mut RUNTIME_PTR: *mut MockTimeRuntime = core::ptr::null_mut();
+thread_local! {
+    static MOCK_RUNTIME: RefCell<Option<MockTimeRuntime>> = RefCell::new(None);
+}
 
-pub(crate) fn with_runtime<F, R>(f: F) -> R
+fn with_runtime<F, R>(f: F) -> R
 where
     F: FnOnce(&mut MockTimeRuntime) -> R,
 {
-    // Safety: mock is single-threaded; tests are serialized by the harness.
-    unsafe { f(&mut *RUNTIME_PTR) }
+    MOCK_RUNTIME.with(|cell| {
+        let mut rt = cell.borrow_mut();
+        let rt = rt.get_or_insert_with(MockTimeRuntime::new);
+        f(rt)
+    })
 }
 
-/// Initialize the shared runtime. Call once before any mock tests.
-pub fn init_runtime() {
-    unsafe {
-        if !RUNTIME_PTR.is_null() {
-            drop(Box::from_raw(RUNTIME_PTR));
-        }
-        RUNTIME_PTR = Box::into_raw(Box::new(MockTimeRuntime::new()));
-    }
-}
-
-/// Reset the runtime between tests. Initializes if not yet done.
+/// Reset the runtime between tests.
 pub fn reset_runtime() {
-    let ptr = unsafe { RUNTIME_PTR };
-    if ptr.is_null() {
-        init_runtime();
-    } else {
-        with_runtime(|rt| rt.reset());
-    }
+    MOCK_RUNTIME.with(|cell| {
+        if let Some(rt) = cell.borrow_mut().as_mut() {
+            rt.reset();
+        }
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -49,7 +42,16 @@ impl Clock for MockClock {
         with_runtime(|rt| rt.now())
     }
     fn delay(duration: Duration) {
-        with_runtime(|rt| rt.advance(duration));
+        // Must execute callbacks outside the RefCell borrow.
+        // advance returns the runtime, we execute callbacks after.
+        let actions = with_runtime(|rt| {
+            rt.advance_time(duration);
+            rt.collect_expired_actions()
+        });
+        for (id, mut cb) in actions {
+            cb();
+            with_runtime(|rt| rt.restore_callback(id, cb));
+        }
     }
 }
 
@@ -68,7 +70,15 @@ impl MockClockControl {
 #[cfg(feature = "testkit")]
 impl osal_testkit::factory::ClockControl for MockClockControl {
     fn advance_clock(&self, d: Duration) {
-        with_runtime(|rt| rt.advance(d));
+        // Same as delay: collect actions inside borrow, execute outside
+        let actions = with_runtime(|rt| {
+            rt.advance_time(d);
+            rt.collect_expired_actions()
+        });
+        for (id, mut cb) in actions {
+            cb();
+            with_runtime(|rt| rt.restore_callback(id, cb));
+        }
     }
 }
 

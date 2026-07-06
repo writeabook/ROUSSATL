@@ -1,16 +1,28 @@
-//! Mock timer — deterministic software timer.
-//!
-//! Uses `Rc` for handle sharing and delegates all operations to the
-//! shared `MockTimeRuntime`.
+//! Mock timer — deterministic software timer with epoch isolation.
 
 use alloc::rc::Rc;
 use core::time::Duration;
 
-use osal_api::error::Result;
+use osal_api::error::{Error, Result};
 use osal_api::traits::timer::{Timer, TimerCallback};
 use osal_api::types::TimerMode;
 
 use crate::clock::with_runtime;
+use crate::time_runtime::MockTimerKey;
+
+// ---------------------------------------------------------------------------
+// Handle inner — Drop deregisters from runtime
+// ---------------------------------------------------------------------------
+
+struct MockTimerHandleInner {
+    key: MockTimerKey,
+}
+
+impl Drop for MockTimerHandleInner {
+    fn drop(&mut self) {
+        with_runtime(|rt| rt.deregister_timer(self.key));
+    }
+}
 
 // ---------------------------------------------------------------------------
 // MockTimer
@@ -18,20 +30,17 @@ use crate::clock::with_runtime;
 
 #[derive(Clone)]
 pub struct MockTimer {
-    id: u64,
-    // Rc so cloned handles share the drop-counting
-    _handle: Rc<()>,
+    inner: Rc<MockTimerHandleInner>,
 }
 
 impl MockTimer {
     pub fn new(_name: &str, period: Duration, mode: TimerMode, callback: TimerCallback) -> Result<Self> {
         if period == Duration::ZERO {
-            return Err(osal_api::error::Error::InvalidParameter);
+            return Err(Error::InvalidParameter);
         }
-        let id = with_runtime(|rt| rt.register_timer(period, mode, callback));
+        let key = with_runtime(|rt| rt.register_timer(period, mode, callback));
         Ok(Self {
-            id,
-            _handle: Rc::new(()),
+            inner: Rc::new(MockTimerHandleInner { key }),
         })
     }
 }
@@ -42,35 +51,26 @@ impl Timer for MockTimer {
     }
 
     fn start(&self) -> Result<()> {
-        with_runtime(|rt| rt.start_timer(self.id));
+        with_runtime(|rt| rt.start_timer(self.inner.key));
         Ok(())
     }
 
     fn stop(&self) -> Result<()> {
-        with_runtime(|rt| rt.stop_timer(self.id));
+        with_runtime(|rt| rt.stop_timer(self.inner.key));
         Ok(())
     }
 
     fn reset(&self) -> Result<()> {
-        with_runtime(|rt| rt.reset_timer(self.id));
+        with_runtime(|rt| rt.reset_timer(self.inner.key));
         Ok(())
     }
 
     fn change_period(&self, new_period: Duration) -> Result<()> {
         if new_period == Duration::ZERO {
-            return Err(osal_api::error::Error::InvalidParameter);
+            return Err(Error::InvalidParameter);
         }
-        with_runtime(|rt| rt.change_period(self.id, new_period));
+        with_runtime(|rt| rt.change_period(self.inner.key, new_period));
         Ok(())
-    }
-}
-
-impl Drop for MockTimer {
-    fn drop(&mut self) {
-        // Only deregister when the last Rc handle drops
-        if Rc::strong_count(&self._handle) == 1 {
-            with_runtime(|rt| rt.deregister_timer(self.id));
-        }
     }
 }
 
@@ -79,9 +79,6 @@ impl Drop for MockTimer {
 // ---------------------------------------------------------------------------
 
 pub struct MockTimerFactory;
-
-#[cfg(feature = "testkit")]
-use osal_testkit::factory::{ClockControl, ClockFactory};
 
 #[cfg(feature = "testkit")]
 impl osal_testkit::factory::TimerFactory for MockTimerFactory {
@@ -106,6 +103,13 @@ impl osal_testkit::factory::ClockFactory for MockTimerFactory {
 #[cfg(feature = "testkit")]
 impl osal_testkit::factory::ClockControl for MockTimerFactory {
     fn advance_clock(&self, d: Duration) {
-        crate::clock::with_runtime(|rt| rt.advance(d));
+        let actions = with_runtime(|rt| {
+            rt.advance_time(d);
+            rt.collect_expired_actions()
+        });
+        for (key, mut cb) in actions {
+            cb();
+            with_runtime(|rt| rt.restore_callback(key, cb));
+        }
     }
 }

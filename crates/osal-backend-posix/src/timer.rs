@@ -10,13 +10,26 @@ use osal_api::types::TimerMode;
 use crate::timer_service;
 
 // ---------------------------------------------------------------------------
+// Handle inner — Drop deregisters from service
+// ---------------------------------------------------------------------------
+
+struct PosixTimerHandleInner {
+    id: u64,
+}
+
+impl Drop for PosixTimerHandleInner {
+    fn drop(&mut self) {
+        timer_service::deregister(self.id);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // PosixTimer
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
 pub struct PosixTimer {
-    id: u64,
-    _handle: Arc<()>,
+    inner: Arc<PosixTimerHandleInner>,
 }
 
 impl PosixTimer {
@@ -27,8 +40,7 @@ impl PosixTimer {
         let id = timer_service::register(period, mode, callback)
             .ok_or(Error::OutOfMemory)?;
         Ok(Self {
-            id,
-            _handle: Arc::new(()),
+            inner: Arc::new(PosixTimerHandleInner { id }),
         })
     }
 }
@@ -39,17 +51,17 @@ impl Timer for PosixTimer {
     }
 
     fn start(&self) -> Result<()> {
-        timer_service::start(self.id);
+        timer_service::start(self.inner.id);
         Ok(())
     }
 
     fn stop(&self) -> Result<()> {
-        timer_service::stop(self.id);
+        timer_service::stop(self.inner.id);
         Ok(())
     }
 
     fn reset(&self) -> Result<()> {
-        timer_service::reset(self.id);
+        timer_service::reset(self.inner.id);
         Ok(())
     }
 
@@ -57,17 +69,8 @@ impl Timer for PosixTimer {
         if new_period == Duration::ZERO {
             return Err(Error::InvalidParameter);
         }
-        timer_service::change_period(self.id, new_period);
+        timer_service::change_period(self.inner.id, new_period);
         Ok(())
-    }
-}
-
-impl Drop for PosixTimer {
-    fn drop(&mut self) {
-        // Only deregister when the last Arc handle drops
-        if Arc::strong_count(&self._handle) == 1 {
-            timer_service::deregister(self.id);
-        }
     }
 }
 
