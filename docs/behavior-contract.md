@@ -403,6 +403,40 @@ impl<T> Drop for MutexGuard<'_, T> { /* releases one lock level */ }
 - Dropping the guard when the mutex has been deleted has undefined
   behavior (the guard should not outlive the mutex).
 
+### Timeout behavior
+
+| Timeout | Behavior |
+|---------|----------|
+| `NoWait` | Return immediately. If held by another task → `Error::LockFailed`. |
+| `After(d)` | Block until acquired or `d` elapsed. Zero duration that cannot immediately acquire → `Error::Timeout`. |
+| `Forever` | Block until acquired. Must not return `Error::Timeout`. |
+
+`After(Duration::ZERO)` is distinct from `NoWait`:
+- `NoWait` on held mutex → `Error::LockFailed`
+- `After(ZERO)` on held mutex → `Error::Timeout`
+
+This is consistent with the Queue contract's timeout semantics.
+
+### Error mapping
+
+| Condition | Error |
+|-----------|-------|
+| Mutex held by another task, `NoWait` | `Error::LockFailed` |
+| Timeout expired before acquisition | `Error::Timeout` |
+| Allocation failure | `Error::OutOfMemory` |
+| POSIX `EDEADLK` (re-entrant lock on non-recursive mutex) | `Error::Internal("pthread_mutex_lock: EDEADLK")` |
+| POSIX `EAGAIN` (max recursive count exceeded) | `Error::LockFailed` |
+
+### Non-requirements
+
+- **No ISR support**: Mutex operations are not ISR-safe.
+- **No poisoning**: OSAL does not expose `std::sync::PoisonError`.
+  Lock failures are platform errors, not data-corruption signals.
+- **No fairness guarantee**: Backends are not required to implement
+  fair (FIFO) wake ordering. Starvation is possible on some platforms.
+- **No manual unlock**: Unlock is through Guard Drop only. There is no
+  `unlock(&self)` method on the mutex.
+
 ### Deletion
 
 - Dropping a `Mutex<T>` while locked: the behavior is backend-defined.
@@ -716,7 +750,7 @@ using pthread and related POSIX APIs.
 
 | OSAL type | POSIX implementation |
 |-----------|---------------------|
-| Mutex | `pthread_mutex_t` (PTHREAD_MUTEX_RECURSIVE for raw, PTHREAD_MUTEX_ERRORCHECK for `Mutex<T>`) |
+| Mutex | `pthread_mutex_t` (PTHREAD_MUTEX_RECURSIVE) |
 | CountingSemaphore | `pthread_mutex_t` + `pthread_cond_t` + count variable |
 | Queue | `pthread_mutex_t` + two `pthread_cond_t` (not_empty, not_full) + ring buffer |
 | Task | `pthread_create` / `pthread_join` |
