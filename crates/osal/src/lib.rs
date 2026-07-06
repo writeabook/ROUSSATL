@@ -62,6 +62,10 @@ pub mod backend;
 /// ```
 pub mod prelude {
     #[cfg(any(feature = "backend-mock", feature = "backend-posix"))]
+    pub use crate::backend::BinarySemaphore;
+    #[cfg(any(feature = "backend-mock", feature = "backend-posix"))]
+    pub use crate::backend::CountingSemaphore;
+    #[cfg(any(feature = "backend-mock", feature = "backend-posix"))]
     pub use crate::backend::Mutex;
     #[cfg(any(feature = "backend-mock", feature = "backend-posix"))]
     pub use crate::backend::Queue;
@@ -69,4 +73,6 @@ pub mod prelude {
     pub use osal_api::prelude::*;
     pub use osal_api::traits::mutex::Mutex as _;
     pub use osal_api::traits::queue::Queue as _;
+    pub use osal_api::traits::semaphore::BinarySemaphore as _;
+    pub use osal_api::traits::semaphore::CountingSemaphore as _;
 }
