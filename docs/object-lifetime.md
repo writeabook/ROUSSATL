@@ -36,6 +36,37 @@ Queue
 The same pattern applies to `Task`, `Timer`, and `Semaphore`.
 Backend native handles must **never** appear in the public API.
 
+### 2.1 Object Model Concepts
+
+OSAL distinguishes four layers of object representation:
+
+| Concept | Visibility | Example | Lifetime |
+|---------|-----------|---------|----------|
+| **Handle** | Public API | `Queue`, `Mutex<T>`, `Timer` | User-controlled via `new()`/`clone()`/`Drop` |
+| **Backend Resource** | Private (backend crate) | `pthread_mutex_t`, ring buffer, condvar | Created by Handle, freed on last Handle drop |
+| **Guard** | Public API (returned by Handle) | `MutexGuard<'a, T>` | Borrows Handle; must not outlive Handle |
+| **Platform Native Object** | Private (sys layer) | `pthread_mutex_t` raw, `QueueHandle_t` | Wrapped by Backend Resource; never exposed to user |
+
+**Handle** is what the application holds. A Handle may be cloned;
+all clones share the same Backend Resource. Drop on a Handle releases
+only that reference; the Backend Resource is freed only when the last
+Handle drops.
+
+**Guard** is a scoped access token returned by operations like
+`lock()`. A Guard borrows the Handle (and through it, the Backend
+Resource) for its lifetime. The Handle must outlive all Guards derived
+from it. Guards are typically `!Send` to prevent them from crossing
+task boundaries.
+
+**Backend Resource** is the Rust-level wrapper around the Platform
+Native Object (e.g. `PosixMutex` wrapping `pthread_mutex_t`). It adds
+safety invariants (RAII, error mapping, UnsafeCell wrapping) on top of
+the raw OS primitive.
+
+**Platform Native Object** is the lowest layer — the actual OS or
+mock primitive. It appears only in `sys` modules and is never visible
+in the public API.
+
 ## 3. Ownership
 
 Each public object owns exactly one backend resource.
