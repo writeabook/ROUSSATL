@@ -1,7 +1,6 @@
 //! Thin wrapper around `pthread_cond_t`.
 
 use core::cell::UnsafeCell;
-use core::time::Duration;
 
 use osal_api::error::Result;
 

@@ -39,3 +39,23 @@ pub use osal_backend_mock::semaphore::MockBinarySemaphore as BinarySemaphore;
 
 #[cfg(all(feature = "backend-posix", not(feature = "backend-mock")))]
 pub use osal_backend_posix::semaphore::PosixBinarySemaphore as BinarySemaphore;
+
+// ---------------------------------------------------------------------------
+// Clock
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "backend-mock")]
+pub use osal_backend_mock::clock::MockClock as Clock;
+
+#[cfg(all(feature = "backend-posix", not(feature = "backend-mock")))]
+pub use osal_backend_posix::clock::PosixClock as Clock;
+
+// ---------------------------------------------------------------------------
+// Timer
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "backend-mock")]
+pub use osal_backend_mock::timer::MockTimer as Timer;
+
+#[cfg(all(feature = "backend-posix", not(feature = "backend-mock")))]
+pub use osal_backend_posix::timer::PosixTimer as Timer;

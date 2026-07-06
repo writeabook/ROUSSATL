@@ -64,15 +64,21 @@ pub mod prelude {
     #[cfg(any(feature = "backend-mock", feature = "backend-posix"))]
     pub use crate::backend::BinarySemaphore;
     #[cfg(any(feature = "backend-mock", feature = "backend-posix"))]
+    pub use crate::backend::Clock;
+    #[cfg(any(feature = "backend-mock", feature = "backend-posix"))]
     pub use crate::backend::CountingSemaphore;
     #[cfg(any(feature = "backend-mock", feature = "backend-posix"))]
     pub use crate::backend::Mutex;
     #[cfg(any(feature = "backend-mock", feature = "backend-posix"))]
     pub use crate::backend::Queue;
+    #[cfg(any(feature = "backend-mock", feature = "backend-posix"))]
+    pub use crate::backend::Timer;
     pub use osal_api::error::{Error, Result};
     pub use osal_api::prelude::*;
+    pub use osal_api::traits::clock::Clock as _;
     pub use osal_api::traits::mutex::Mutex as _;
     pub use osal_api::traits::queue::Queue as _;
     pub use osal_api::traits::semaphore::BinarySemaphore as _;
     pub use osal_api::traits::semaphore::CountingSemaphore as _;
+    pub use osal_api::traits::timer::Timer as _;
 }
