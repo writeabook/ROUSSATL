@@ -43,10 +43,9 @@ impl Drop for MutexAttr {
 
 /// Wrapper around `pthread_mutex_t`.
 ///
-/// Uses `PTHREAD_MUTEX_RECURSIVE` to support recursive locking for
-/// `Mutex<T>`. For non-recursive use cases, use the higher-level
-/// `Mutex<T>` trait, which guarantees correct nesting via guard
-/// ownership.
+/// Uses `PTHREAD_MUTEX_ERRORCHECK` for deadlock detection.
+/// Non-recursive: a second lock from the same thread returns
+/// `EDEADLK`.
 ///
 /// The inner FFI object is wrapped in [`UnsafeCell`] because
 /// pthread operations mutate it through `&self`.
@@ -62,7 +61,7 @@ impl PosixMutex {
         errno::check_ret(unsafe {
             libc::pthread_mutexattr_settype(
                 &raw const attr.inner as *mut _,
-                libc::PTHREAD_MUTEX_RECURSIVE,
+                libc::PTHREAD_MUTEX_ERRORCHECK,
             )
         })?;
 

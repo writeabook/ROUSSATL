@@ -14,9 +14,8 @@ use osal_backend_posix::mutex::PosixMutexImpl;
 /// NoWait fails with LockFailed when mutex is held by another thread.
 #[test]
 fn no_wait_fails_when_held() {
-    use std::sync::Arc;
-    let m = Arc::new(PosixMutexImpl::new(0u32).unwrap());
-    let m2 = Arc::clone(&m);
+    let m = PosixMutexImpl::new(0u32).unwrap();
+    let m2 = m.clone();
 
     let _guard = m.lock(Timeout::NoWait).unwrap();
 
@@ -30,9 +29,8 @@ fn no_wait_fails_when_held() {
 /// After returns Timeout when mutex stays held.
 #[test]
 fn after_returns_timeout_when_held() {
-    use std::sync::Arc;
-    let m = Arc::new(PosixMutexImpl::new(0u32).unwrap());
-    let m2 = Arc::clone(&m);
+    let m = PosixMutexImpl::new(0u32).unwrap();
+    let m2 = m.clone();
 
     let _guard = m.lock(Timeout::NoWait).unwrap();
 
@@ -46,9 +44,8 @@ fn after_returns_timeout_when_held() {
 /// Forever is woken when the guard is dropped by another thread.
 #[test]
 fn forever_woken_by_guard_drop() {
-    use std::sync::Arc;
-    let m = Arc::new(PosixMutexImpl::new(0u32).unwrap());
-    let m2 = Arc::clone(&m);
+    let m = PosixMutexImpl::new(0u32).unwrap();
+    let m2 = m.clone();
 
     let guard = m.lock(Timeout::NoWait).unwrap();
 
