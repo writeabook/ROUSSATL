@@ -9,7 +9,10 @@
 
 extern crate alloc;
 
+pub mod clock;
 pub mod mutex;
 pub mod queue;
 pub mod semaphore;
+pub mod timer;
+pub(crate) mod timer_service;
 pub(crate) mod sys;

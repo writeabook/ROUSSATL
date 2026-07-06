@@ -1,0 +1,23 @@
+//! Contract tests for POSIX timer.
+//!
+//! POSIX passes core + realtime contracts.
+//!
+//! Requires `--features testkit`:
+//! ```bash
+//! cargo test -p osal-backend-posix --features testkit
+//! ```
+
+use osal_backend_posix::timer::PosixTimerFactory;
+
+#[test]
+fn posix_timer_core_contracts() {
+    let factory = PosixTimerFactory;
+    osal_testkit::contract::timer::run_core_contracts(&factory);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn posix_timer_realtime_contracts() {
+    let factory = PosixTimerFactory;
+    osal_testkit::contract::timer::realtime::run_realtime_contracts(&factory);
+}
