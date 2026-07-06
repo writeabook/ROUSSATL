@@ -1,12 +1,34 @@
 # Changelog
 
-## P1 — Mutex Vertical Slice (in progress)
+## P1 — Mutex Vertical Slice (2026-07-06)
+
+### Added
+
+- ADR 0006: Object Handle Model (strong typed handles, no global ID registry).
+- `Mutex<T>` backend implementations:
+  - `MockMutex<T>` (`Rc` + `UnsafeCell` + `Cell<usize>`, recursive).
+  - `PosixMutexImpl<T>` (`PTHREAD_MUTEX_RECURSIVE`, `try_lock`, `timed_lock`).
+- `MutexCoreContract`: 8 tests covering creation, lock/unlock, recursive,
+  guard semantics.
+- `MutexBlockingContract`: 3 cross-thread tests (POSIX only).
+- `mock_mutex` and `posix_mutex` examples.
+- `docs/mutex-foundation-slice.md` — architecture, components, deferred items.
+
+### Changed
+
+- `sys/mutex.rs`: switched from `PTHREAD_MUTEX_ERRORCHECK` to
+  `PTHREAD_MUTEX_RECURSIVE`.
+- `sys/mutex.rs`: added `try_lock()` and `timed_lock()` methods.
+- `behavior-contract.md`: fixed POSIX table (Mutex<T> → RECURSIVE);
+  added timeout table, error mapping, non-requirements.
+- README Mutex row updated from "API only" to fully implemented.
+- `object-lifetime.md`: added Guard concept and four-layer object model.
 
 ### Fixed
 
 - `docs/queue-foundation-slice.md`: removed "POSIX Queue implementation"
-  from Intentionally Deferred; updated contract test counts to match
-  current state; updated Status to Complete.
+  from Intentionally Deferred; updated contract test counts; updated
+  Status to Complete.
 
 ## P0 — Queue Vertical Slice Stabilization (2026-07-03)
 

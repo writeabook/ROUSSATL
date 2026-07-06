@@ -18,7 +18,7 @@ across different platforms by switching the backend.
 | Queue Core      | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        |
 | Queue Blocking  | ✓        | —        | Deferred | ✓        | ✓        | ✓        |
 | Queue ISR       | Deferred | —        | —        | —        | —        | —        |
-| Mutex           | API only | —        | —        | sys only | skeleton | —        |
+| Mutex           | ✓        | —        | ✓        | ✓        | ✓        | ✓        |
 | Semaphore       | API only | —        | —        | —        | skeleton | —        |
 | System          | API only | —        | —        | —        | skeleton | —        |
 | Task            | API only | —        | —        | —        | skeleton | —        |
@@ -86,12 +86,11 @@ Proprietary. See [LICENSE](LICENSE) for details.
 
 ## Status
 
-**Queue vertical slice stabilization (P0).**
+**P0 complete: Queue vertical slice stabilized. P1 in progress: Mutex vertical slice.**
 
-POSIX Queue and Mock Queue core are implemented and tested. Contract
-tests are split into `QueueCoreContract` (all backends) and
-`QueueBlockingContract` (POSIX only during P0). ISR operations are
-deferred to a future `IsrQueue` extension trait.
+POSIX Queue, Mock Queue, POSIX Mutex, and Mock Mutex are implemented
+and tested. Contract tests split into Core (all backends) and Blocking
+(POSIX only). ISR operations deferred to FreeRTOS phase.
 
 CI enforces format, clippy, tests, docs, and feature matrix checks.
 
