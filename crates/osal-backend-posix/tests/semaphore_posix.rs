@@ -53,7 +53,8 @@ where
 
     let handle = thread::spawn(move || {
         b.wait();
-        s2.acquire(Timeout::After(Duration::from_millis(200))).unwrap();
+        s2.acquire(Timeout::After(Duration::from_millis(200)))
+            .unwrap();
     });
 
     barrier.wait();

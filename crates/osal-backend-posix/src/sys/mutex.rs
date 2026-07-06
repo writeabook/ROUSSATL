@@ -104,7 +104,9 @@ impl PosixMutex {
         let deadline = time::monotonic_now_raw();
         // Compute absolute deadline.
         let deadline = libc::timespec {
-            tv_sec: deadline.tv_sec.saturating_add(timeout.as_secs() as libc::time_t),
+            tv_sec: deadline
+                .tv_sec
+                .saturating_add(timeout.as_secs() as libc::time_t),
             tv_nsec: deadline.tv_nsec + timeout.subsec_nanos() as libc::c_long,
         };
         // Normalize nsec carry-over.

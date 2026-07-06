@@ -49,16 +49,16 @@ impl PosixCountingSemaphore {
             inner: Arc::new(PosixCountingSemaphoreInner {
                 mutex: PosixMutex::new()?,
                 condvar: PosixCondvar::new()?,
-                state: UnsafeCell::new(CountingSemaphoreState::new(
-                    max_count,
-                    initial_count,
-                )?),
+                state: UnsafeCell::new(CountingSemaphoreState::new(max_count, initial_count)?),
                 max_count,
             }),
         })
     }
 
-    fn state_locked(&self, _guard: &crate::sys::mutex::PosixMutexGuard<'_>) -> &mut CountingSemaphoreState {
+    fn state_locked(
+        &self,
+        _guard: &crate::sys::mutex::PosixMutexGuard<'_>,
+    ) -> &mut CountingSemaphoreState {
         unsafe { &mut *self.inner.state.get() }
     }
 }

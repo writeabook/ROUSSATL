@@ -210,7 +210,11 @@ fn dispatch_one(svc: &TimerService) {
 // Public API
 // ---------------------------------------------------------------------------
 
-pub fn register(period: Duration, mode: osal_api::types::TimerMode, callback: TimerCallback) -> Option<u64> {
+pub fn register(
+    period: Duration,
+    mode: osal_api::types::TimerMode,
+    callback: TimerCallback,
+) -> Option<u64> {
     with_service_locked(|svc, state| {
         let id = state.next_id;
         state.next_id += 1;

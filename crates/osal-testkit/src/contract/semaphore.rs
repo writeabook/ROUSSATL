@@ -74,7 +74,8 @@ pub fn counting_empty_after_zero_times_out<F: SemaphoreFactory>(factory: &F) {
 
 pub fn counting_available_after_zero_succeeds<F: SemaphoreFactory>(factory: &F) {
     let sem = factory.create_counting_semaphore(3, 1).unwrap();
-    sem.acquire(Timeout::After(core::time::Duration::ZERO)).unwrap();
+    sem.acquire(Timeout::After(core::time::Duration::ZERO))
+        .unwrap();
     assert_eq!(sem.count().unwrap(), 0);
 }
 

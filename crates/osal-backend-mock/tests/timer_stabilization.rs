@@ -12,13 +12,25 @@ use osal_backend_mock::timer::MockTimer;
 fn callback_stops_self() {
     clock::reset_runtime();
     let fired = Cell::new(false);
-    let t = MockTimer::new("t", Duration::from_millis(100), TimerMode::Periodic,
-        Box::new(|| fired.set(true))).unwrap();
+    let t = MockTimer::new(
+        "t",
+        Duration::from_millis(100),
+        TimerMode::Periodic,
+        Box::new(|| fired.set(true)),
+    )
+    .unwrap();
     t.start().unwrap();
     // This callback stops itself
     let t2 = t.clone();
-    let t3 = MockTimer::new("self_stop", Duration::from_millis(100), TimerMode::OneShot,
-        Box::new(move || { t2.stop().unwrap(); })).unwrap();
+    let t3 = MockTimer::new(
+        "self_stop",
+        Duration::from_millis(100),
+        TimerMode::OneShot,
+        Box::new(move || {
+            t2.stop().unwrap();
+        }),
+    )
+    .unwrap();
     t3.start().unwrap();
     MockClockControl.advance_clock(Duration::from_millis(200));
     // t3's callback stopped t3 itself
@@ -29,12 +41,24 @@ fn callback_stops_self() {
 #[test]
 fn callback_resets_self() {
     clock::reset_runtime();
-    let t = MockTimer::new("t", Duration::from_millis(100), TimerMode::OneShot,
-        Box::new(|| {})).unwrap();
+    let t = MockTimer::new(
+        "t",
+        Duration::from_millis(100),
+        TimerMode::OneShot,
+        Box::new(|| {}),
+    )
+    .unwrap();
     let t2 = t.clone();
     // Callback that resets the timer
-    let rst = MockTimer::new("rst", Duration::from_millis(50), TimerMode::OneShot,
-        Box::new(move || { t2.reset().unwrap(); })).unwrap();
+    let rst = MockTimer::new(
+        "rst",
+        Duration::from_millis(50),
+        TimerMode::OneShot,
+        Box::new(move || {
+            t2.reset().unwrap();
+        }),
+    )
+    .unwrap();
     t.start().unwrap();
     rst.start().unwrap();
     MockClockControl.advance_clock(Duration::from_millis(200));
@@ -49,15 +73,32 @@ fn callback_stops_another_timer() {
     let a_fired = Cell::new(false);
     let b_fired = Cell::new(false);
 
-    let ta = MockTimer::new("A", Duration::from_millis(100), TimerMode::OneShot,
-        Box::new(|| a_fired.set(true))).unwrap();
-    let tb = MockTimer::new("B", Duration::from_millis(100), TimerMode::OneShot,
-        Box::new(|| b_fired.set(true))).unwrap();
+    let ta = MockTimer::new(
+        "A",
+        Duration::from_millis(100),
+        TimerMode::OneShot,
+        Box::new(|| a_fired.set(true)),
+    )
+    .unwrap();
+    let tb = MockTimer::new(
+        "B",
+        Duration::from_millis(100),
+        TimerMode::OneShot,
+        Box::new(|| b_fired.set(true)),
+    )
+    .unwrap();
     let tb2 = tb.clone();
 
     // Callback that stops B
-    let stopper = MockTimer::new("stopper", Duration::from_millis(50), TimerMode::OneShot,
-        Box::new(move || { tb2.stop().unwrap(); })).unwrap();
+    let stopper = MockTimer::new(
+        "stopper",
+        Duration::from_millis(50),
+        TimerMode::OneShot,
+        Box::new(move || {
+            tb2.stop().unwrap();
+        }),
+    )
+    .unwrap();
 
     ta.start().unwrap();
     tb.start().unwrap();
@@ -72,8 +113,13 @@ fn callback_stops_another_timer() {
 fn oneshot_re_trigger() {
     clock::reset_runtime();
     let fired = Cell::new(0u32);
-    let t = MockTimer::new("t", Duration::from_millis(100), TimerMode::OneShot,
-        Box::new(|| fired.set(fired.get() + 1))).unwrap();
+    let t = MockTimer::new(
+        "t",
+        Duration::from_millis(100),
+        TimerMode::OneShot,
+        Box::new(|| fired.set(fired.get() + 1)),
+    )
+    .unwrap();
     t.start().unwrap();
     MockClockControl.advance_clock(Duration::from_millis(150));
     assert_eq!(fired.get(), 1);
@@ -86,26 +132,36 @@ fn oneshot_re_trigger() {
 #[test]
 fn epoch_reset_isolates_old_handles() {
     clock::reset_runtime();
-    let t = MockTimer::new("t", Duration::from_millis(100), TimerMode::OneShot,
-        Box::new(|| {})).unwrap();
+    let t = MockTimer::new(
+        "t",
+        Duration::from_millis(100),
+        TimerMode::OneShot,
+        Box::new(|| {}),
+    )
+    .unwrap();
 
     clock::reset_runtime();
     // Old handle's epoch no longer matches — operations should be no-ops
     t.start().unwrap(); // no panic
-    t.stop().unwrap();  // no panic
+    t.stop().unwrap(); // no panic
     t.reset().unwrap(); // no panic
-    drop(t);            // no panic (deregister with old epoch finds nothing)
+    drop(t); // no panic (deregister with old epoch finds nothing)
 }
 
 #[test]
 fn callback_calls_delay() {
     clock::reset_runtime();
     let fired = Cell::new(false);
-    let t = MockTimer::new("t", Duration::from_millis(100), TimerMode::OneShot,
+    let t = MockTimer::new(
+        "t",
+        Duration::from_millis(100),
+        TimerMode::OneShot,
         Box::new(|| {
             MockClock::delay(Duration::from_millis(50));
             fired.set(true);
-        })).unwrap();
+        }),
+    )
+    .unwrap();
     t.start().unwrap();
     MockClockControl.advance_clock(Duration::from_millis(200));
     assert!(fired.get());
@@ -115,8 +171,13 @@ fn callback_calls_delay() {
 fn periodic_not_reentrant() {
     clock::reset_runtime();
     let count = Cell::new(0u32);
-    let t = MockTimer::new("t", Duration::from_millis(100), TimerMode::Periodic,
-        Box::new(|| count.set(count.get() + 1))).unwrap();
+    let t = MockTimer::new(
+        "t",
+        Duration::from_millis(100),
+        TimerMode::Periodic,
+        Box::new(|| count.set(count.get() + 1)),
+    )
+    .unwrap();
     t.start().unwrap();
     MockClockControl.advance_clock(Duration::from_millis(350));
     // 100ms period, 350ms advance = one fire with 3 missed periods coalesced
@@ -127,8 +188,13 @@ fn periodic_not_reentrant() {
 fn callback_in_flight_last_handle_dropped() {
     clock::reset_runtime();
     let fired = Cell::new(false);
-    let t = MockTimer::new("t", Duration::from_millis(100), TimerMode::OneShot,
-        Box::new(|| fired.set(true))).unwrap();
+    let t = MockTimer::new(
+        "t",
+        Duration::from_millis(100),
+        TimerMode::OneShot,
+        Box::new(|| fired.set(true)),
+    )
+    .unwrap();
     // Clone + drop before advance so last handle drops during... well mock is sync.
     // Just verify no panic on drop during callback-like scenario.
     let t2 = t.clone();

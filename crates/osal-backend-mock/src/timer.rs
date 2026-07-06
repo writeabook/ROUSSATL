@@ -10,8 +10,7 @@ use osal_api::types::TimerMode;
 use crate::clock::advance_and_dispatch;
 use crate::time_runtime::MockTimerKey;
 
-static RUNTIME: spin::Mutex<Option<crate::time_runtime::MockTimeRuntime>> =
-    spin::Mutex::new(None);
+static RUNTIME: spin::Mutex<Option<crate::time_runtime::MockTimeRuntime>> = spin::Mutex::new(None);
 
 fn with_runtime<F, R>(f: F) -> R
 where
@@ -48,7 +47,12 @@ pub struct MockTimer {
 }
 
 impl MockTimer {
-    pub fn new(_name: &str, period: Duration, mode: TimerMode, callback: TimerCallback) -> Result<Self> {
+    pub fn new(
+        _name: &str,
+        period: Duration,
+        mode: TimerMode,
+        callback: TimerCallback,
+    ) -> Result<Self> {
         if period == Duration::ZERO {
             return Err(Error::InvalidParameter);
         }

@@ -116,7 +116,8 @@ mod tests {
     #[test]
     fn periodic_overflow() {
         assert_eq!(
-            next_periodic_deadline(Duration::MAX, Duration::from_secs(1), Duration::ZERO).unwrap_err(),
+            next_periodic_deadline(Duration::MAX, Duration::from_secs(1), Duration::ZERO)
+                .unwrap_err(),
             Error::Overflow
         );
     }

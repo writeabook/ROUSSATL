@@ -33,12 +33,16 @@ pub struct PosixTimer {
 }
 
 impl PosixTimer {
-    pub fn new(_name: &str, period: Duration, mode: TimerMode, callback: TimerCallback) -> Result<Self> {
+    pub fn new(
+        _name: &str,
+        period: Duration,
+        mode: TimerMode,
+        callback: TimerCallback,
+    ) -> Result<Self> {
         if period == Duration::ZERO {
             return Err(Error::InvalidParameter);
         }
-        let id = timer_service::register(period, mode, callback)
-            .ok_or(Error::OutOfMemory)?;
+        let id = timer_service::register(period, mode, callback).ok_or(Error::OutOfMemory)?;
         Ok(Self {
             inner: Arc::new(PosixTimerHandleInner { id }),
         })

@@ -121,7 +121,9 @@ pub fn oneshot_fires_once<F: ControlledTimerFactory>(factory: &F) {
             "os",
             Duration::from_millis(100),
             TimerMode::OneShot,
-            Box::new(move || { f.fetch_add(1, Ordering::Relaxed); }),
+            Box::new(move || {
+                f.fetch_add(1, Ordering::Relaxed);
+            }),
         )
         .unwrap();
     t.start().unwrap();
@@ -143,7 +145,9 @@ pub fn periodic_fires_multiple<F: ControlledTimerFactory>(factory: &F) {
             "p",
             Duration::from_millis(100),
             TimerMode::Periodic,
-            Box::new(move || { f.fetch_add(1, Ordering::Relaxed); }),
+            Box::new(move || {
+                f.fetch_add(1, Ordering::Relaxed);
+            }),
         )
         .unwrap();
     t.start().unwrap();
@@ -166,7 +170,9 @@ pub fn stop_prevents_callback<F: ControlledTimerFactory>(factory: &F) {
             "s",
             Duration::from_millis(100),
             TimerMode::OneShot,
-            Box::new(move || { f.store(true, Ordering::Relaxed); }),
+            Box::new(move || {
+                f.store(true, Ordering::Relaxed);
+            }),
         )
         .unwrap();
     t.start().unwrap();
@@ -185,7 +191,9 @@ pub fn reset_restarts_deadline<F: ControlledTimerFactory>(factory: &F) {
             "r",
             Duration::from_millis(100),
             TimerMode::OneShot,
-            Box::new(move || { f.fetch_add(1, Ordering::Relaxed); }),
+            Box::new(move || {
+                f.fetch_add(1, Ordering::Relaxed);
+            }),
         )
         .unwrap();
     t.start().unwrap();
@@ -207,7 +215,9 @@ pub fn missed_expiration_coalesced<F: ControlledTimerFactory>(factory: &F) {
             "m",
             Duration::from_millis(100),
             TimerMode::Periodic,
-            Box::new(move || { f.fetch_add(1, Ordering::Relaxed); }),
+            Box::new(move || {
+                f.fetch_add(1, Ordering::Relaxed);
+            }),
         )
         .unwrap();
     t.start().unwrap();
@@ -230,8 +240,8 @@ pub fn run_controlled_contracts<F: ControlledTimerFactory>(factory: &F) {
 #[cfg(feature = "std")]
 pub mod realtime {
     use super::*;
-    use std::sync::atomic::{AtomicU32, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicU32, Ordering};
     use std::time::Instant;
 
     pub fn oneshot_fires_within_bounds<F: TimerFactory>(factory: &F) {

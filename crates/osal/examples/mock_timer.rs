@@ -6,8 +6,8 @@
 //! ```
 
 use core::time::Duration;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use osal::prelude::*;
 
@@ -22,7 +22,9 @@ fn main() {
         "oneshot",
         Duration::from_millis(100),
         TimerMode::OneShot,
-        Box::new(move || { f.fetch_add(1, Ordering::Relaxed); }),
+        Box::new(move || {
+            f.fetch_add(1, Ordering::Relaxed);
+        }),
     )
     .unwrap();
 
@@ -39,7 +41,9 @@ fn main() {
         "periodic",
         Duration::from_millis(100),
         TimerMode::Periodic,
-        Box::new(move || { c.fetch_add(1, Ordering::Relaxed); }),
+        Box::new(move || {
+            c.fetch_add(1, Ordering::Relaxed);
+        }),
     )
     .unwrap();
 
