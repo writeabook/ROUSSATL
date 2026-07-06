@@ -2,9 +2,9 @@
 
 ## Status
 
-Complete — Mutex vertical slice is implemented across the full stack:
-API trait, Mock backend, POSIX backend, contract tests, facade, and
-examples.
+Stabilized (P1.1) — Non-recursive Mutex with corrected memory safety,
+handle model, and monotonic clock. Mock and POSIX pass all core and
+blocking contracts.
 
 ## Architecture
 
@@ -27,7 +27,7 @@ examples.
 | Layer | Type | Location |
 |-------|------|----------|
 | API | `Mutex<T>` trait | `crates/osal-api/src/traits/mutex.rs` |
-| POSIX sys | `PosixMutex` (RECURSIVE) | `crates/osal-backend-posix/src/sys/mutex.rs` |
+| POSIX sys | `PosixMutex` (ERRORCHECK) | `crates/osal-backend-posix/src/sys/mutex.rs` |
 | POSIX backend | `PosixMutexImpl<T>` | `crates/osal-backend-posix/src/mutex.rs` |
 | Mock backend | `MockMutex<T>` | `crates/osal-backend-mock/src/mutex.rs` |
 | Facade | `Mutex` alias | `crates/osal/src/backend.rs` |
@@ -38,14 +38,15 @@ examples.
 
 | Decision | Value |
 |----------|-------|
-| Recursive | Yes — same task can lock N times |
+| Recursive | No — non-recursive, single guard only |
 | Guard `!Send` | Yes — PhantomData<*const ()> |
 | Guard drop | Only unlock path; no manual unlock |
 | Poisoning | Not supported |
 | NoWait failure | `Error::LockFailed` |
 | After(ZERO) failure | `Error::Timeout` |
-| POSIX type | `PTHREAD_MUTEX_RECURSIVE` |
-| Mock model | `UnsafeCell<T>` + `Cell<usize>` (recursion counter) |
+| POSIX type | `PTHREAD_MUTEX_ERRORCHECK` |
+| POSIX Handle | Arc<PosixMutexInner<T>>, Clone implemented |
+| Mock model | `UnsafeCell<T>` + `Cell<bool>` (locked flag) |
 
 ## Contract Tests Passing
 
@@ -57,9 +58,9 @@ examples.
 - `guard_deref_mut` — mutable access via DerefMut
 - `lock_forever` — Forever succeeds uncontended
 - `lock_no_wait` — NoWait succeeds uncontended
-- `recursive_lock` — same task locks twice
-- `recursive_lock_three_levels` — three recursive locks, all see same data
-- `guard_drop_releases_one_level` — inner drop still holds outer
+- `no_second_guard` — second lock while held → LockFailed (non-recursive)
+- `clone_shares_state` — clone sees same protected data
+- `drop_clone_keeps_alive` — drop one clone, other still works
 
 ### MutexBlockingContract (POSIX only)
 

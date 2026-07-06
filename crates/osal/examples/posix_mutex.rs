@@ -1,4 +1,4 @@
-//! POSIX mutex example — demonstrates basic lock/unlock and timeout.
+//! POSIX mutex example — basic lock/unlock, clone sharing, and timeout.
 //!
 //! Run with:
 //! ```bash
@@ -12,28 +12,24 @@ use osal::prelude::*;
 fn main() {
     let m = Mutex::new(0u32).unwrap();
 
-    // Basic lock/unlock
+    // Basic lock/unlock with mutable access
     {
         let mut guard = m.lock(Timeout::NoWait).unwrap();
         *guard = 42;
         println!("Set value to: {}", *guard);
     }
 
-    // Recursive lock
+    // Clone shares the same protected data
+    let m2 = m.clone();
     {
-        let g1 = m.lock(Timeout::NoWait).unwrap();
-        let g2 = m.lock(Timeout::NoWait).unwrap();
-        println!("Recursive: {} {}", *g1, *g2);
-        drop(g2);
-        drop(g1);
+        let guard = m2.lock(Timeout::Forever).unwrap();
+        println!("Clone sees: {}", *guard);
     }
 
-    // Demonstrate After on already-held mutex — succeeds (recursive)
-    let _guard = m.lock(Timeout::NoWait).unwrap();
-    let result = m.lock(Timeout::After(Duration::from_millis(1)));
-    assert!(result.is_ok());
-    println!("Recursive After succeeded (same thread).");
-    drop(_guard);
+    // After timeout on uncontended mutex
+    let guard = m.lock(Timeout::After(Duration::from_millis(1))).unwrap();
+    println!("After succeeded: {}", *guard);
+    drop(guard);
 
     println!("Mutex example complete.");
 }

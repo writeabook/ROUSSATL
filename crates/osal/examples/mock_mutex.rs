@@ -1,4 +1,4 @@
-//! Mock mutex example — demonstrates basic lock/unlock and recursive locking.
+//! Mock mutex example — basic lock/unlock and clone sharing.
 //!
 //! Run with:
 //! ```bash
@@ -10,23 +10,21 @@ use osal::prelude::*;
 fn main() {
     let m = Mutex::new(0u32).unwrap();
 
-    // Basic lock/unlock
+    // Basic lock/unlock with mutable access
     {
         let mut guard = m.lock(Timeout::NoWait).unwrap();
         *guard += 1;
         println!("Value: {}", *guard);
     }
 
-    // Recursive lock
+    // Clone shares the same protected data
+    let m2 = m.clone();
     {
-        let g1 = m.lock(Timeout::NoWait).unwrap();
-        let g2 = m.lock(Timeout::NoWait).unwrap();
-        println!("Recursive lock: {} {}", *g1, *g2);
-        drop(g2);
-        drop(g1);
+        let mut guard = m2.lock(Timeout::NoWait).unwrap();
+        *guard = 42;
     }
 
-    // Re-lock after all guards dropped
+    // Original handle sees the change
     let guard = m.lock(Timeout::Forever).unwrap();
     println!("Final value: {}", *guard);
 }

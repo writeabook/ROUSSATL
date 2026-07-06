@@ -1,5 +1,33 @@
 # Changelog
 
+## P1.1 — Mutex Correctness Stabilization (2026-07-06)
+
+### Changed (Breaking)
+
+- **`Mutex<T>` is now non-recursive.** Re-locking while a guard is
+  alive returns `Error::LockFailed`. The previous recursive + `DerefMut`
+  combination was unsound (aliased `&mut T`). Recursive locking is
+  deferred to a future `RecursiveMutex` type.
+
+### Fixed
+
+- **Memory safety**: Mock `MockMutexInner` no longer has `unsafe impl
+  Send/Sync`. Only one guard can exist at a time.
+- **Handle model**: POSIX `PosixMutexImpl<T>` now uses
+  `Arc<PosixMutexInner<T>>` and implements `Clone` per ADR 0006.
+- **Clock correctness**: POSIX `timed_lock` now uses monotonic clock
+  (`clock_gettime(CLOCK_MONOTONIC)` + `try_lock` loop) instead of
+  `pthread_mutex_timedlock` which may use `CLOCK_REALTIME`.
+- **Sys mutex type**: `PTHREAD_MUTEX_RECURSIVE` → `PTHREAD_MUTEX_ERRORCHECK`.
+- **Contract tests**: Removed recursive tests; added non-recursive tests
+  (`no_second_guard`, `clone_shares_state`, `drop_clone_keeps_alive`).
+
+### Added
+
+- ADR 0007: Mutex Access Model (non-recursive, single guard).
+- `monotonic_now_raw()`, `nanosleep()`, `timespec_ge()` helpers in
+  `sys/time.rs`.
+
 ## P1 — Mutex Vertical Slice (2026-07-06)
 
 ### Added
