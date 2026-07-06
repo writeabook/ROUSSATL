@@ -17,3 +17,4 @@
 extern crate alloc;
 
 pub mod byte_queue;
+pub mod counting_semaphore;
