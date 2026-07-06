@@ -9,5 +9,6 @@ extern crate alloc;
 
 pub mod clock;
 pub mod fault;
+pub mod mutex;
 pub mod queue;
 pub mod wait;

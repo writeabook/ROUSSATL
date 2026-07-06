@@ -82,25 +82,26 @@ pub fn recursive_lock<F: MutexFactory>(factory: &F) {
     let _g3 = m.lock(Timeout::NoWait).unwrap();
 }
 
-/// Three levels of recursive locking.
+/// Three levels of recursive locking — all guards see the same data.
 pub fn recursive_lock_three_levels<F: MutexFactory>(factory: &F) {
     let m = factory.create_mutex(0).unwrap();
     let mut g1 = m.lock(Timeout::NoWait).unwrap();
-    *g1 = 1;
+    *g1 = 10;
     let mut g2 = m.lock(Timeout::NoWait).unwrap();
-    *g2 = 2;
+    // g2 sees the same data as g1.
+    assert_eq!(*g2, 10);
+    *g2 = 20;
     let g3 = m.lock(Timeout::NoWait).unwrap();
-    assert_eq!(*g3, 2);
+    // g3 sees g2's write (same underlying data).
+    assert_eq!(*g3, 20);
     drop(g3);
-    // g2 still holds; value unchanged.
-    assert_eq!(*g2, 2);
     drop(g2);
-    // g1 still holds; value unchanged.
-    assert_eq!(*g1, 1);
+    // g1 still holds; value is whatever was last written.
+    assert_eq!(*g1, 20);
     drop(g1);
     // All released; re-lock and verify final value.
     let guard = m.lock(Timeout::NoWait).unwrap();
-    assert_eq!(*guard, 1);
+    assert_eq!(*guard, 20);
 }
 
 /// Guard drop releases exactly one recursion level.
