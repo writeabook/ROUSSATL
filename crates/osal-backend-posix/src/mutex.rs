@@ -14,7 +14,6 @@ use osal_api::error::{Error, Result};
 use osal_api::time::Timeout;
 use osal_api::traits::mutex::Mutex;
 
-use crate::sys::condvar;
 use crate::sys::mutex::PosixMutex;
 
 // ---------------------------------------------------------------------------
@@ -126,8 +125,7 @@ impl<T: 'static> Mutex<T> for PosixMutexImpl<T> {
                         Err(e) => return Err(e),
                     }
                 } else {
-                    let deadline = condvar::abs_deadline(d);
-                    self.inner.raw.timed_lock(&deadline)?;
+                    self.inner.raw.timed_lock(d)?;
                 }
             }
             Timeout::Forever => {

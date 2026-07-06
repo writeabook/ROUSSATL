@@ -1,6 +1,7 @@
 //! Thin wrapper around `pthread_mutex_t`.
 
 use core::cell::UnsafeCell;
+use core::time::Duration;
 
 use osal_api::error::Result;
 
@@ -88,18 +89,44 @@ impl PosixMutex {
         errno::check_ret(unsafe { libc::pthread_mutex_trylock(self.raw_ptr()) })
     }
 
-    /// Timed lock with absolute deadline.
+    /// Timed lock with monotonic deadline.
     ///
-    /// Uses `CLOCK_MONOTONIC`. The mutex must have been initialized
-    /// with a monotonic-clock-compatible attribute (which the
-    /// `PTHREAD_MUTEX_RECURSIVE` path satisfies on Linux).
+    /// Uses `clock_gettime(CLOCK_MONOTONIC)` and `try_lock` with
+    /// `nanosleep` backoff to ensure the timeout is measured against
+    /// a monotonic clock, regardless of the platform's default
+    /// `pthread_mutex_timedlock` clock behavior.
     ///
     /// Returns `Error::Timeout` if the deadline expires before
     /// the lock is acquired.
-    pub fn timed_lock(&self, abs_time: &libc::timespec) -> Result<()> {
-        errno::check_ret(unsafe {
-            libc::pthread_mutex_timedlock(self.raw_ptr(), abs_time)
-        })
+    pub fn timed_lock(&self, timeout: Duration) -> Result<()> {
+        use crate::sys::time;
+
+        let deadline = time::monotonic_now_raw();
+        // Compute absolute deadline.
+        let deadline = libc::timespec {
+            tv_sec: deadline.tv_sec.saturating_add(timeout.as_secs() as libc::time_t),
+            tv_nsec: deadline.tv_nsec + timeout.subsec_nanos() as libc::c_long,
+        };
+        // Normalize nsec carry-over.
+        let deadline = libc::timespec {
+            tv_sec: deadline.tv_sec + deadline.tv_nsec / 1_000_000_000,
+            tv_nsec: deadline.tv_nsec % 1_000_000_000,
+        };
+
+        loop {
+            match self.try_lock() {
+                Ok(()) => return Ok(()),
+                Err(osal_api::error::Error::LockFailed) => {
+                    let now = time::monotonic_now_raw();
+                    if time::timespec_ge(&now, &deadline) {
+                        return Err(osal_api::error::Error::Timeout);
+                    }
+                    // Small sleep to avoid busy-wait.
+                    time::nanosleep(core::time::Duration::from_millis(1));
+                }
+                Err(e) => return Err(e),
+            }
+        }
     }
 
     /// Unlock the mutex.
