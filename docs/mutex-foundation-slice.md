@@ -3,8 +3,8 @@
 ## Status
 
 Stabilized (P1.1) — Non-recursive Mutex with corrected memory safety,
-handle model, and monotonic clock. Mock and POSIX pass all core and
-blocking contracts.
+handle model, and monotonic clock. Mock and POSIX pass all core
+contracts. POSIX additionally passes the blocking and contention tests.
 
 ## Architecture
 
@@ -18,8 +18,8 @@ blocking contracts.
   PosixMutexImpl<T>        MockMutex<T>
          |                       |
     PosixMutex              Rc + UnsafeCell
-  (PTHREAD_MUTEX_         + Cell<usize>
-   RECURSIVE)
+  (PTHREAD_MUTEX_         + Cell<bool>
+   ERRORCHECK)
 ```
 
 ## Components

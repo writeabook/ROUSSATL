@@ -86,11 +86,12 @@ Proprietary. See [LICENSE](LICENSE) for details.
 
 ## Status
 
-**P0 complete: Queue vertical slice stabilized. P1 in progress: Mutex vertical slice.**
+**P0 complete: Queue vertical slice stabilized. P1 and P1.1 complete: Mutex vertical slice stabilized.**
 
 POSIX Queue, Mock Queue, POSIX Mutex, and Mock Mutex are implemented
-and tested. Contract tests split into Core (all backends) and Blocking
-(POSIX only). ISR operations deferred to FreeRTOS phase.
+and tested. Mutex is non-recursive (ADR 0007). Contract tests split
+into Core (all backends) and Blocking (POSIX only). ISR operations
+deferred to FreeRTOS phase.
 
 CI enforces format, clippy, tests, docs, and feature matrix checks.
 

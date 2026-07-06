@@ -55,7 +55,7 @@ pub struct PosixMutex {
 }
 
 impl PosixMutex {
-    /// Create and initialize a new recursive mutex.
+    /// Create and initialize a new non-recursive error-checking mutex.
     pub fn new() -> Result<Self> {
         let attr = MutexAttr::new()?;
 

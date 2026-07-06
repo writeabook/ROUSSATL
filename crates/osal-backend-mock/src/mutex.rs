@@ -121,21 +121,15 @@ impl<T: 'static> Mutex<T> for MockMutex<T> {
     }
 
     fn lock(&self, timeout: Timeout) -> Result<Self::Guard<'_>> {
+        // Non-recursive: reject all re-lock attempts while a guard
+        // is alive. In the single-context mock, a held lock always
+        // means same-context re-entry.
         if self.inner.locked.get() {
-            match timeout {
-                Timeout::NoWait => return Err(Error::LockFailed),
-                Timeout::After(d) => {
-                    if d == core::time::Duration::ZERO {
-                        return Err(Error::Timeout);
-                    }
-                    // Non-zero After on locked mutex — succeed immediately
-                    // in mock (single-context, no real contention).
-                }
-                Timeout::Forever => {
-                    // Forever on locked mutex — would block forever in
-                    // real system but mock has no contention.
-                }
-            }
+            return match timeout {
+                Timeout::NoWait => Err(Error::LockFailed),
+                Timeout::After(_) => Err(Error::Timeout),
+                Timeout::Forever => Err(Error::LockFailed),
+            };
         }
 
         self.inner.locked.set(true);
@@ -159,5 +153,44 @@ impl osal_testkit::factory::MutexFactory for MockMutexFactory {
 
     fn create_mutex(&self, value: u32) -> Result<Self::Mutex> {
         MockMutex::new(value)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Unit tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core::time::Duration;
+
+    #[test]
+    fn after_nonzero_relock_returns_timeout() {
+        let m = MockMutex::new(0u32).unwrap();
+        let _guard = m.lock(Timeout::NoWait).unwrap();
+        let result = m.lock(Timeout::After(Duration::from_millis(10)));
+        assert!(matches!(result, Err(Error::Timeout)));
+    }
+
+    #[test]
+    fn forever_relock_returns_lock_failed() {
+        let m = MockMutex::new(0u32).unwrap();
+        let _guard = m.lock(Timeout::NoWait).unwrap();
+        let result = m.lock(Timeout::Forever);
+        assert!(matches!(result, Err(Error::LockFailed)));
+    }
+
+    #[test]
+    fn failed_relock_does_not_release_original_guard() {
+        let m = MockMutex::new(0u32).unwrap();
+        let guard = m.lock(Timeout::NoWait).unwrap();
+
+        assert!(m.lock(Timeout::NoWait).is_err());
+        assert!(m.lock(Timeout::After(Duration::from_millis(1))).is_err());
+        assert!(m.lock(Timeout::Forever).is_err());
+
+        drop(guard);
+        assert!(m.lock(Timeout::NoWait).is_ok());
     }
 }

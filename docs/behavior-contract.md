@@ -425,8 +425,7 @@ This is consistent with the Queue contract's timeout semantics.
 | Mutex held by another task, `NoWait` | `Error::LockFailed` |
 | Timeout expired before acquisition | `Error::Timeout` |
 | Allocation failure | `Error::OutOfMemory` |
-| POSIX `EDEADLK` (re-entrant lock on non-recursive mutex) | `Error::Internal("pthread_mutex_lock: EDEADLK")` |
-| POSIX `EAGAIN` (max recursive count exceeded) | `Error::LockFailed` |
+| POSIX `EDEADLK` (re-entrant lock, same thread) | `Error::LockFailed` |
 
 ### Non-requirements
 
@@ -751,7 +750,7 @@ using pthread and related POSIX APIs.
 
 | OSAL type | POSIX implementation |
 |-----------|---------------------|
-| Mutex | `pthread_mutex_t` (PTHREAD_MUTEX_RECURSIVE) |
+| Mutex | `pthread_mutex_t` (PTHREAD_MUTEX_ERRORCHECK) |
 | CountingSemaphore | `pthread_mutex_t` + `pthread_cond_t` + count variable |
 | Queue | `pthread_mutex_t` + two `pthread_cond_t` (not_empty, not_full) + ring buffer |
 | Task | `pthread_create` / `pthread_join` |
@@ -817,7 +816,7 @@ Backends must pass all non-skipped tests.
 |------|-------------|-------|------|
 | Create and store value | `Mutex::new(v)` works | R | R |
 | Lock and unlock | Guard provides &mut T, drop releases | R | R |
-| Recursive lock | Same task locks N times, unlocks N times | R | R |
+| Non-recursive: second lock fails | Re-lock while held → LockFailed | R | R |
 | Cross-task mutual exclusion | Other task blocks while locked | R | R |
 | Non-blocking try-lock | `Timeout::NoWait` returns `LockFailed` if held | R | R |
 | Timeout expires | `Timeout::After(d)` returns `Timeout` | R | R |

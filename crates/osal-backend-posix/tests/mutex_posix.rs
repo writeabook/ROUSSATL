@@ -58,3 +58,23 @@ fn forever_woken_by_guard_drop() {
     drop(guard);
     handle.join().unwrap();
 }
+
+/// Timed lock does not return Timeout before the requested duration.
+#[test]
+fn after_does_not_timeout_early() {
+    use std::time::Instant;
+
+    let m = PosixMutexImpl::new(0u32).unwrap();
+    let m2 = m.clone();
+    let _guard = m.lock(Timeout::NoWait).unwrap();
+
+    let handle = thread::spawn(move || {
+        let start = Instant::now();
+        let result = m2.lock(Timeout::After(Duration::from_millis(30)));
+        assert!(matches!(result, Err(Error::Timeout)));
+        assert!(start.elapsed() >= Duration::from_millis(20));
+        assert!(start.elapsed() < Duration::from_secs(1));
+    });
+
+    handle.join().unwrap();
+}
