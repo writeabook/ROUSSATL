@@ -1,5 +1,13 @@
 # Changelog
 
+## P1 — Mutex Vertical Slice (in progress)
+
+### Fixed
+
+- `docs/queue-foundation-slice.md`: removed "POSIX Queue implementation"
+  from Intentionally Deferred; updated contract test counts to match
+  current state; updated Status to Complete.
+
 ## P0 — Queue Vertical Slice Stabilization (2026-07-03)
 
 ### Added
