@@ -457,16 +457,17 @@ A counting semaphore for resource management and task signaling.
 impl CountingSemaphore {
     pub fn new(max_count: u32, initial_count: u32) -> Result<Self>;
     pub fn max_count(&self) -> u32;
-    pub fn count(&self) -> u32;
+    pub fn count(&self) -> Result<u32>;
 }
 ```
 
 - `new(max, initial)`:
   - Returns `Error::InvalidParameter` if `initial > max` or `max == 0`.
   - Returns `Error::OutOfMemory` on allocation failure.
-- `max_count()`: returns the configured maximum count.
-- `count()`: returns the current count (snapshot; may change
-  immediately after return).
+- `max_count()`: returns the configured maximum count (non-fallible; fixed at construction).
+- `count()`: returns the current count. May fail if the backend cannot
+  acquire the internal lock. The returned value is a snapshot; the
+  actual count may change immediately after return.
 
 ### Operations
 
@@ -474,9 +475,6 @@ impl CountingSemaphore {
 impl CountingSemaphore {
     pub fn acquire(&self, timeout: Timeout) -> Result<()>;
     pub fn release(&self) -> Result<()>;
-
-    pub fn isr_acquire(&self) -> Result<()>;
-    pub fn isr_release(&self) -> Result<()>;
 }
 ```
 
@@ -484,35 +482,54 @@ impl CountingSemaphore {
   - If `count > 0`: decrement and return `Ok(())`.
   - If `count == 0` and `NoWait`: return `Error::Timeout`.
   - If `count == 0` and `After(d)`: block until `release()` wakes us or
-    timeout expires.
+    timeout expires. `After(ZERO)` returns `Error::Timeout` if unavailable.
   - If `count == 0` and `Forever`: block until `release()` wakes us.
-  - Wakes exactly one blocked acquirer per `release()`.
+  - Each `release()` wakes at most one blocked acquirer.
 - `release()`:
   - If `count < max_count`: increment and wake one acquirer.
   - If `count == max_count`: return `Error::Overflow` (the
-    semaphore is already at maximum count).
-- `isr_acquire()`: non-blocking; equivalent to
-  `acquire(Timeout::NoWait)`.
-- `isr_release()`: ISR-safe; may be called from interrupt context.
+    semaphore is already at maximum count). Count is unchanged.
+
+> **ISR note:** ISR-safe acquire/release are deferred to a future
+> `IsrSemaphore` extension trait (see ADR 0008). The core
+> `CountingSemaphore` trait only provides task-context operations.
+
+### Timeout behavior
+
+| Timeout | `count > 0` | `count == 0` |
+|---------|-------------|--------------|
+| `NoWait` | Immediate success | `Error::Timeout` |
+| `After(ZERO)` | Immediate success | `Error::Timeout` |
+| `After(d>0)` | Immediate success | Block; `Error::Timeout` at deadline |
+| `Forever` | Immediate success | Block until `release()` |
+
+POSIX backends must use `CLOCK_MONOTONIC` for `After(d)` deadlines.
+
+### Handle Clone
+
+Semaphore handles may be cloned. All clones share the same underlying
+count state. Dropping one clone does not affect the resource; the
+resource is freed only when the last clone is dropped. (See ADR 0006.)
 
 ### Type: `BinarySemaphore`
 
-A convenience wrapper around `CountingSemaphore` with `max_count = 1`.
+A convenience wrapper around `CountingSemaphore` with `max_count = 1`,
+initial count = 0 (unsignaled).
 
 ```rust
 impl BinarySemaphore {
     pub fn new() -> Result<Self>;
     pub fn acquire(&self, timeout: Timeout) -> Result<()>;
     pub fn release(&self) -> Result<()>;
-    pub fn is_acquired(&self) -> bool;
-    pub fn isr_acquire(&self) -> Result<()>;
-    pub fn isr_release(&self) -> Result<()>;
+    pub fn is_signaled(&self) -> Result<bool>;
 }
 ```
 
-- `new()`: creates with `count = 0`, `max_count = 1`.
-- `is_acquired()`: returns `true` if `count == 1`.
-- All other methods delegate to the underlying `CountingSemaphore`.
+- `new()`: creates with `count = 0`, `max_count = 1` (unsignaled).
+- `is_signaled()`: returns `Ok(true)` if `count == 1`, `Ok(false)` if
+  `count == 0`. May fail if the internal lock cannot be acquired.
+- `release()` when already signaled returns `Error::Overflow`.
+- All methods delegate to the underlying `CountingSemaphore`.
 
 ---
 
@@ -832,11 +849,12 @@ Backends must pass all non-skipped tests.
 | Reject max == 0 | `Error::InvalidParameter` | R | R |
 | acquire decrements count | count goes from N to N-1 | R | R |
 | release increments count | count goes from N to N+1 | R | R |
-| acquire blocks on empty | Task waits until release | R | R |
+| acquire blocks on empty | Task waits until release | R | S |
 | Timeout on empty | `Timeout::After(d)` returns `Timeout` | R | R |
 | release at max fails | `Error::Overflow` | R | R |
-| release wakes exactly one | N releases wake N waiters, not more | R | R |
-| BinarySemaphore basics | `new()`, `acquire()`, `release()` | R | R |
+| release wakes exactly one | N releases wake N waiters, not more | R | S |
+| BinarySemaphore basics | `new()`, `acquire()`, `release()`, `is_signaled()` | R | R |
+| Clone shares state | Clone sees same count | R | R |
 
 ### Queue tests
 
