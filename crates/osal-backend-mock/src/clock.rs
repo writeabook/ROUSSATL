@@ -1,102 +1,74 @@
-//! Deterministic mock clock for testing.
-//!
-//! Uses a static atomic counter so that [`MockClock`] can implement
-//! the static [`Clock`] trait while supporting per-test time control
-//! via [`MockClockControl`].
-//!
-//! Tests should call [`reset()`] at the start of each test to ensure
-//! isolation from other tests that advance the clock.
+//! Mock clock — deterministic virtual time via shared runtime.
 
-use core::sync::atomic::{AtomicU64, Ordering};
+use alloc::boxed::Box;
 use core::time::Duration;
 
 use osal_api::traits::clock::Clock;
 
-// ---------------------------------------------------------------------------
-// Clock state (nanoseconds as u64)
-// ---------------------------------------------------------------------------
+use crate::time_runtime::MockTimeRuntime;
 
-static MOCK_TIME_NS: AtomicU64 = AtomicU64::new(0);
+// Raw pointer for single-threaded mock access. Tests are serialized.
+static mut RUNTIME_PTR: *mut MockTimeRuntime = core::ptr::null_mut();
 
-fn get_ns() -> u64 {
-    MOCK_TIME_NS.load(Ordering::Relaxed)
+pub(crate) fn with_runtime<F, R>(f: F) -> R
+where
+    F: FnOnce(&mut MockTimeRuntime) -> R,
+{
+    // Safety: mock is single-threaded; tests are serialized by the harness.
+    unsafe { f(&mut *RUNTIME_PTR) }
 }
 
-fn set_ns(ns: u64) {
-    MOCK_TIME_NS.store(ns, Ordering::Relaxed);
+/// Initialize the shared runtime. Call once before any mock tests.
+pub fn init_runtime() {
+    unsafe {
+        if !RUNTIME_PTR.is_null() {
+            drop(Box::from_raw(RUNTIME_PTR));
+        }
+        RUNTIME_PTR = Box::into_raw(Box::new(MockTimeRuntime::new()));
+    }
 }
 
-fn add_ns(ns: u64) {
-    MOCK_TIME_NS.fetch_add(ns, Ordering::Relaxed);
-}
-
-fn ns_to_duration(ns: u64) -> Duration {
-    Duration::from_nanos(ns)
-}
-
-fn duration_to_ns(d: Duration) -> u64 {
-    d.as_nanos() as u64
-}
-
-/// Advance the mock clock by `d`.
-pub fn advance(d: Duration) {
-    add_ns(duration_to_ns(d));
-}
-
-/// Reset the mock clock to zero.
-pub fn reset() {
-    set_ns(0);
+/// Reset the runtime between tests. Initializes if not yet done.
+pub fn reset_runtime() {
+    let ptr = unsafe { RUNTIME_PTR };
+    if ptr.is_null() {
+        init_runtime();
+    } else {
+        with_runtime(|rt| rt.reset());
+    }
 }
 
 // ---------------------------------------------------------------------------
-// Clock trait implementation
+// MockClock
 // ---------------------------------------------------------------------------
 
-/// A deterministic clock for testing.
-///
-/// Implements [`Clock`] using a static atomic counter. Use
-/// [`MockClockControl`] to advance time in tests.
 pub struct MockClock;
 
 impl Clock for MockClock {
     fn now() -> Duration {
-        ns_to_duration(get_ns())
+        with_runtime(|rt| rt.now())
     }
-
-    fn elapsed(since: Duration) -> Duration {
-        let now = Self::now();
-        if now >= since {
-            now - since
-        } else {
-            Duration::ZERO
-        }
-    }
-
     fn delay(duration: Duration) {
-        add_ns(duration_to_ns(duration));
+        with_runtime(|rt| rt.advance(duration));
     }
 }
 
 // ---------------------------------------------------------------------------
-// ClockControl implementation
+// MockClockControl
 // ---------------------------------------------------------------------------
 
-/// Control interface for the mock clock.
-///
-/// Provides `advance(d)` and `reset()` for test code.
 pub struct MockClockControl;
 
 impl MockClockControl {
-    /// Reset the mock clock to zero.
     pub fn reset(&self) {
-        reset();
+        reset_runtime();
     }
 }
 
 #[cfg(feature = "testkit")]
 impl osal_testkit::factory::ClockControl for MockClockControl {
     fn advance_clock(&self, d: Duration) {
-        advance(d);
+        with_runtime(|rt| rt.advance(d));
     }
 }
 

@@ -12,4 +12,6 @@ pub mod fault;
 pub mod mutex;
 pub mod queue;
 pub mod semaphore;
+pub mod time_runtime;
+pub mod timer;
 pub mod wait;

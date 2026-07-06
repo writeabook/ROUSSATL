@@ -147,7 +147,12 @@ pub fn periodic_fires_multiple<F: ControlledTimerFactory>(factory: &F) {
         )
         .unwrap();
     t.start().unwrap();
-    factory.advance_clock(Duration::from_millis(350));
+    // Advance in steps so each period is processed separately
+    factory.advance_clock(Duration::from_millis(100));
+    assert_eq!(fired.load(Ordering::Relaxed), 1);
+    factory.advance_clock(Duration::from_millis(100));
+    assert_eq!(fired.load(Ordering::Relaxed), 2);
+    factory.advance_clock(Duration::from_millis(100));
     assert!(fired.load(Ordering::Relaxed) >= 3);
 }
 
