@@ -24,7 +24,8 @@ impl PosixTimer {
         if period == Duration::ZERO {
             return Err(Error::InvalidParameter);
         }
-        let id = timer_service::register(period, mode, callback);
+        let id = timer_service::register(period, mode, callback)
+            .ok_or(Error::OutOfMemory)?;
         Ok(Self {
             id,
             _handle: Arc::new(()),

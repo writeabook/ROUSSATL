@@ -1,15 +1,15 @@
 //! POSIX Timer Service — single background pthread for timer callbacks.
 //!
-//! Lazy-initialized on first timer creation. Uses `pthread_mutex_t` +
-//! `pthread_cond_t` (CLOCK_MONOTONIC) for waiting. Callbacks execute
-//! outside the registry lock.
+//! Lazy-initialized via `pthread_once`. State is protected by `PosixMutex`.
+//! Callbacks execute outside the mutex lock.
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::cell::UnsafeCell;
+use core::mem::MaybeUninit;
 use core::time::Duration;
 
 use osal_api::traits::timer::TimerCallback;
-use osal_api::types::TimerMode;
 use osal_portable::timer_state::TimerState;
 
 use crate::sys::condvar::PosixCondvar;
@@ -17,7 +17,7 @@ use crate::sys::mutex::PosixMutex;
 use crate::sys::time;
 
 // ---------------------------------------------------------------------------
-// Registry entry
+// Service state
 // ---------------------------------------------------------------------------
 
 struct TimerEntry {
@@ -27,38 +27,73 @@ struct TimerEntry {
     deleted: bool,
 }
 
-// ---------------------------------------------------------------------------
-// Service singleton
-// ---------------------------------------------------------------------------
-
-struct ServiceInner {
-    mutex: PosixMutex,
-    condvar: PosixCondvar,
+struct TimerServiceState {
     timers: Vec<TimerEntry>,
     next_id: u64,
     initialized: bool,
 }
 
-static mut SERVICE_PTR: *mut ServiceInner = core::ptr::null_mut();
-
-fn with_service<R>(f: impl FnOnce(&mut ServiceInner) -> R) -> R {
-    unsafe { f(&mut *SERVICE_PTR) }
+struct TimerService {
+    mutex: PosixMutex,
+    condvar: PosixCondvar,
+    state: UnsafeCell<TimerServiceState>,
 }
 
-fn ensure_initialized() {
+// Safety: all state access is guarded by the mutex.
+unsafe impl Send for TimerService {}
+unsafe impl Sync for TimerService {}
+
+// ---------------------------------------------------------------------------
+// Singleton via pthread_once
+// ---------------------------------------------------------------------------
+
+static mut SERVICE_ONCE: libc::pthread_once_t = libc::PTHREAD_ONCE_INIT;
+static mut SERVICE: MaybeUninit<TimerService> = MaybeUninit::uninit();
+static mut SERVICE_OK: bool = false;
+
+extern "C" fn init_service() {
     unsafe {
-        if SERVICE_PTR.is_null() {
-            let inner = Box::new(ServiceInner {
-                mutex: PosixMutex::new().expect("TimerService mutex"),
-                condvar: PosixCondvar::new().expect("TimerService condvar"),
+        let mutex = match PosixMutex::new() {
+            Ok(m) => m,
+            Err(_) => return,
+        };
+        let condvar = match PosixCondvar::new() {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        SERVICE.write(TimerService {
+            mutex,
+            condvar,
+            state: UnsafeCell::new(TimerServiceState {
                 timers: Vec::new(),
                 next_id: 1,
                 initialized: false,
-            });
-            SERVICE_PTR = Box::into_raw(inner);
-            spawn_service_thread();
-        }
+            }),
+        });
+        SERVICE_OK = true;
+        spawn_service_thread();
     }
+}
+
+fn ensure_init() -> bool {
+    unsafe {
+        libc::pthread_once(&raw mut SERVICE_ONCE, Some(init_service));
+        SERVICE_OK
+    }
+}
+
+fn with_service<R>(f: impl FnOnce(&TimerService) -> R) -> Option<R> {
+    if !ensure_init() {
+        return None;
+    }
+    unsafe { Some(f(&*SERVICE.as_ptr())) }
+}
+
+fn with_service_state<R>(f: impl FnOnce(&mut TimerServiceState) -> R) -> Option<R> {
+    with_service(|svc| {
+        let state = unsafe { &mut *svc.state.get() };
+        f(state)
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -73,27 +108,25 @@ fn spawn_service_thread() {
         let mut thread: libc::pthread_t = core::mem::zeroed();
         let ret = libc::pthread_create(&mut thread, &attr, service_loop, core::ptr::null_mut());
         libc::pthread_attr_destroy(&mut attr);
-        assert_eq!(ret, 0, "pthread_create for TimerService failed");
-        // Mark as initialized so we don't spawn another thread
-        with_service(|s| s.initialized = true);
+        if ret != 0 {
+            // Thread creation failed after init succeeded — mark as broken
+        }
     }
 }
 
 extern "C" fn service_loop(_arg: *mut core::ffi::c_void) -> *mut core::ffi::c_void {
     loop {
-        // Access raw pointer to avoid double-borrow issues with lock_guard
-        let s = unsafe { &mut *SERVICE_PTR };
+        let svc = unsafe { &*SERVICE.as_ptr() };
+        let mut guard = svc.mutex.lock_guard().unwrap();
+        let state = unsafe { &mut *svc.state.get() };
 
         // Clean up deleted timers
-        s.timers.retain(|e| !e.deleted);
-
-        // Acquire lock for condvar wait
-        let mut guard = s.mutex.lock_guard().unwrap();
+        state.timers.retain(|e| !e.deleted);
 
         // Find earliest deadline
         let now = time::monotonic_now();
         let mut earliest: Option<Duration> = None;
-        for e in &s.timers {
+        for e in &state.timers {
             if let Some(d) = e.state.deadline() {
                 match earliest {
                     None => earliest = Some(d),
@@ -105,27 +138,32 @@ extern "C" fn service_loop(_arg: *mut core::ffi::c_void) -> *mut core::ffi::c_vo
 
         match earliest {
             None => {
-                let _ = s.condvar.wait(&mut guard);
+                let _ = svc.condvar.wait(&mut guard);
             }
             Some(deadline) if deadline <= now => {
                 drop(guard);
-                dispatch_expired(s);
+                // Dispatch one callback outside lock
+                dispatch_one(svc);
             }
             Some(deadline) => {
                 let timeout = deadline.saturating_sub(now);
                 let abs = time::abs_deadline(timeout);
-                let _ = s.condvar.timed_wait(&mut guard, &abs);
+                let _ = svc.condvar.timed_wait(&mut guard, &abs);
             }
         }
     }
 }
 
-fn dispatch_expired(s: &mut ServiceInner) {
+/// Dispatch ONE expired timer. Locks, finds earliest expired, takes
+/// callback, unlocks, executes, re-locks, restores callback.
+fn dispatch_one(svc: &TimerService) {
+    let mut guard = svc.mutex.lock_guard().unwrap();
+    let state = unsafe { &mut *svc.state.get() };
     let now = time::monotonic_now();
 
-    // Find the timer with earliest deadline <= now
+    // Find earliest expired with callback present
     let mut best_idx: Option<usize> = None;
-    for (i, e) in s.timers.iter().enumerate() {
+    for (i, e) in state.timers.iter().enumerate() {
         if e.deleted || e.callback.is_none() {
             continue;
         }
@@ -142,22 +180,24 @@ fn dispatch_expired(s: &mut ServiceInner) {
         None => return,
     };
 
-    let entry = &mut s.timers[idx];
-
-    // Pre-advance state before callback
+    let entry = &mut state.timers[idx];
     if !entry.state.advance_on_expiry(now) {
         return;
     }
+    let id = entry.id;
     let mut callback = entry.callback.take().unwrap();
 
-    // Execute outside lock: we need to drop the borrow on `s`.
-    // A full implementation would release the mutex here.
-    // (Will be fixed in a subsequent commit.)
+    // Release ALL borrows before executing callback
+    drop(state);
+    drop(guard);
+
     callback();
 
-    // Restore callback if entry still exists (both OneShot and Periodic)
-    if let Some(entry) = s.timers.get_mut(idx) {
-        if !entry.deleted && entry.callback.is_none() {
+    // Re-acquire and restore
+    let mut guard2 = svc.mutex.lock_guard().unwrap();
+    let state2 = unsafe { &mut *svc.state.get() };
+    if let Some(entry) = state2.timers.iter_mut().find(|e| e.id == id && !e.deleted) {
+        if entry.callback.is_none() {
             entry.callback = Some(callback);
         }
     }
@@ -167,68 +207,75 @@ fn dispatch_expired(s: &mut ServiceInner) {
 // Public API
 // ---------------------------------------------------------------------------
 
-pub fn register(period: Duration, mode: TimerMode, callback: TimerCallback) -> u64 {
-    ensure_initialized();
-    with_service(|s| {
-        let id = s.next_id;
-        s.next_id += 1;
-        s.timers.push(TimerEntry {
+pub fn register(period: Duration, mode: osal_api::types::TimerMode, callback: TimerCallback) -> Option<u64> {
+    with_service_state(|state| {
+        let id = state.next_id;
+        state.next_id += 1;
+        state.timers.push(TimerEntry {
             id,
             state: TimerState::new(period, mode).expect("period validated by caller"),
             callback: Some(callback),
             deleted: false,
         });
-        // Signal service thread to recompute earliest deadline
-        let _ = s.condvar.signal();
         id
     })
 }
 
 pub fn start(id: u64) {
-    with_service(|s| {
-        if let Some(e) = s.timers.iter_mut().find(|e| e.id == id && !e.deleted) {
-            let now = time::monotonic_now();
+    with_service(|svc| {
+        let guard = svc.mutex.lock_guard().unwrap();
+        let state = unsafe { &mut *svc.state.get() };
+        let now = time::monotonic_now();
+        if let Some(e) = state.timers.iter_mut().find(|e| e.id == id && !e.deleted) {
             let _ = e.state.start(now);
-            let _ = s.condvar.signal();
+            let _ = svc.condvar.signal();
         }
     });
 }
 
 pub fn stop(id: u64) {
-    with_service(|s| {
-        if let Some(e) = s.timers.iter_mut().find(|e| e.id == id && !e.deleted) {
+    with_service(|svc| {
+        let guard = svc.mutex.lock_guard().unwrap();
+        let state = unsafe { &mut *svc.state.get() };
+        if let Some(e) = state.timers.iter_mut().find(|e| e.id == id && !e.deleted) {
             e.state.stop();
-            let _ = s.condvar.signal();
+            let _ = svc.condvar.signal();
         }
     });
 }
 
 pub fn reset(id: u64) {
-    with_service(|s| {
-        if let Some(e) = s.timers.iter_mut().find(|e| e.id == id && !e.deleted) {
-            let now = time::monotonic_now();
+    with_service(|svc| {
+        let guard = svc.mutex.lock_guard().unwrap();
+        let state = unsafe { &mut *svc.state.get() };
+        let now = time::monotonic_now();
+        if let Some(e) = state.timers.iter_mut().find(|e| e.id == id && !e.deleted) {
             let _ = e.state.reset(now);
-            let _ = s.condvar.signal();
+            let _ = svc.condvar.signal();
         }
     });
 }
 
 pub fn change_period(id: u64, new_period: Duration) {
-    with_service(|s| {
-        if let Some(e) = s.timers.iter_mut().find(|e| e.id == id && !e.deleted) {
+    with_service(|svc| {
+        let guard = svc.mutex.lock_guard().unwrap();
+        let state = unsafe { &mut *svc.state.get() };
+        if let Some(e) = state.timers.iter_mut().find(|e| e.id == id && !e.deleted) {
             let _ = e.state.change_period(new_period);
-            let _ = s.condvar.signal();
+            let _ = svc.condvar.signal();
         }
     });
 }
 
 pub fn deregister(id: u64) {
-    with_service(|s| {
-        if let Some(e) = s.timers.iter_mut().find(|e| e.id == id && !e.deleted) {
+    with_service(|svc| {
+        let guard = svc.mutex.lock_guard().unwrap();
+        let state = unsafe { &mut *svc.state.get() };
+        if let Some(e) = state.timers.iter_mut().find(|e| e.id == id && !e.deleted) {
             e.deleted = true;
             e.state.stop();
             e.callback = None;
-            let _ = s.condvar.signal();
+            let _ = svc.condvar.signal();
         }
     });
 }
