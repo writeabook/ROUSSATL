@@ -19,7 +19,9 @@ across different platforms by switching the backend.
 | Queue Blocking  | ✓        | —        | Deferred | ✓        | ✓        | ✓        |
 | Queue ISR       | Deferred | —        | —        | —        | —        | —        |
 | Mutex           | ✓        | —        | ✓        | ✓        | ✓        | ✓        |
-| Semaphore       | API only | —        | —        | —        | skeleton | —        |
+| CountingSemaphore | ✓      | ✓        | ✓        | ✓        | ✓        | ✓        |
+| BinarySemaphore | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        |
+| Semaphore ISR   | Deferred | —        | —        | —        | —        | —        |
 | System          | API only | —        | —        | —        | skeleton | —        |
 | Task            | API only | —        | —        | —        | skeleton | —        |
 | Timer           | API only | —        | —        | —        | skeleton | —        |
@@ -86,12 +88,13 @@ Proprietary. See [LICENSE](LICENSE) for details.
 
 ## Status
 
-**P0 complete: Queue vertical slice stabilized. P1 and P1.1 complete: Mutex vertical slice stabilized.**
+**P0 complete: Queue stabilized. P1/P1.1 complete: Mutex stabilized. P2 complete: Semaphore stabilized.**
 
-POSIX Queue, Mock Queue, POSIX Mutex, and Mock Mutex are implemented
-and tested. Mutex is non-recursive (ADR 0007). Contract tests split
-into Core (all backends) and Blocking (POSIX only). ISR operations
-deferred to FreeRTOS phase.
+Queue, Mutex, CountingSemaphore, and BinarySemaphore are implemented
+across API, Portable, Mock, POSIX, contract tests, and facade.
+Mutex is non-recursive (ADR 0007). ISR operations deferred to
+FreeRTOS phase. Contract tests split into Core (all backends) and
+Blocking (POSIX only).
 
 CI enforces format, clippy, tests, docs, and feature matrix checks.
 

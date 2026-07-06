@@ -1,5 +1,29 @@
 # Changelog
 
+## P2 — Semaphore Foundation Slice (2026-07-06)
+
+### Added
+
+- `CountingSemaphore` trait with `acquire`/`release`/`max_count`/`count`.
+- `BinarySemaphore` trait with `acquire`/`release`/`is_signaled`.
+- ADR 0008: ISR Extension Model (ISR removed from core traits).
+- `CountingSemaphoreState` portable state machine in `osal-portable`.
+- `MockCountingSemaphore` (Rc) and `MockBinarySemaphore` (delegation).
+- `PosixCountingSemaphore` (Arc, mutex+condvar, monotonic clock).
+- `PosixBinarySemaphore` (delegates to PosixCountingSemaphore).
+- 14 CountingCore + 9 BinaryCore contract tests.
+- 8 POSIX blocking contract tests (generic over SemaphoreFactory).
+- `mock_semaphore` and `posix_semaphore` examples.
+- `docs/semaphore-foundation-slice.md`.
+
+### Changed
+
+- **ISR removed from core semaphore traits** (matching Queue P0).
+- **`count()` returns `Result<u32>`** (matching Queue `len()`).
+- **`is_acquired()` → `is_signaled() -> Result<bool>`**.
+- `max_count()` is immutable cached value (no lock).
+- Behavior contract §10 fully updated.
+
 ## P1.1 — Mutex Correctness Stabilization (2026-07-06)
 
 ### Changed (Breaking)
