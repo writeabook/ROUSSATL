@@ -59,3 +59,13 @@ pub use osal_backend_mock::timer::MockTimer as Timer;
 
 #[cfg(all(feature = "backend-posix", not(feature = "backend-mock")))]
 pub use osal_backend_posix::timer::PosixTimer as Timer;
+
+// ---------------------------------------------------------------------------
+// System
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "backend-mock")]
+pub use osal_backend_mock::system::MockSystem as System;
+
+#[cfg(all(feature = "backend-posix", not(feature = "backend-mock")))]
+pub use osal_backend_posix::system::PosixSystem as System;
