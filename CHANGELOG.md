@@ -1,5 +1,36 @@
 # Changelog
 
+## P5 — Task Foundation Slice (2026-07-07)
+
+### Added
+
+- Mock task implementation (synchronous execution in `spawn()`).
+- POSIX pthread-based task implementation with completion-state machine
+  (`Running → Finished → Joining → Joined`).
+- Task smoke contract tests (5 tests) for both Mock and POSIX backends.
+- POSIX task timeout join tests.
+- Facade `Task` and `TaskBuilder` aliases.
+- Backend-agnostic `task` facade example.
+
+### Notes
+
+- Task entry functions return `()`. Normal return maps to
+  `ExitCode::SUCCESS`.
+- `drop` on a `Task` handle does **not** cancel the task.
+- Repeated `join()` returns the cached exit code immediately.
+- POSIX timeout join uses `pthread_cond_timedwait` on backend
+  completion state rather than non-portable `pthread_timedjoin_np`.
+- Mock task execution is synchronous in this foundation slice
+  (no mock scheduler).
+- Priority is stored and reported; scheduling effect is
+  backend-specific.
+
+### Deferred
+
+- Cancellation, suspend/resume, real priority scheduling, CPU
+  affinity, stack watermark, deterministic mock scheduler,
+  FreeRTOS task mapping.
+
 ## P4 — System Foundation Slice (2026-07-07)
 
 ### Added

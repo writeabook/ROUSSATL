@@ -314,16 +314,22 @@ impl Task {
 }
 ```
 
+- `entry` return: the entry function (`FnOnce() + Send + 'static`)
+  returns `()`; normal return maps to `ExitCode::SUCCESS`.
 - `join(timeout)`: blocks until the task exits.
   - Returns `Ok(ExitCode)` on successful join.
   - Once the task has exited, the exit code is cached; subsequent
-    calls to `join` return it immediately.
+    calls to `join` return it immediately without blocking.
   - Returns `Error::Timeout` if the task does not exit within the
     timeout. The caller retains the handle and may retry.
   - Returns `Error::NotInitialized` if the task was never spawned.
+- `drop`: dropping a `Task` handle does **not** cancel the task or
+  kill the thread. The task continues to run independently.
 - `handle()`: returns an opaque `Handle` uniquely identifying this
   task.
-- `priority()`: returns the task's current priority.
+- `priority()`: returns the task's configured priority. Priority is
+  stored and reported; scheduling effect is backend-specific and not
+  guaranteed in this foundation slice.
 
 ### Static methods
 
