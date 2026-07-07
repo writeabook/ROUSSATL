@@ -743,7 +743,88 @@ modified during callback execution and the old expiration logic
 
 ---
 
-## 13. Unsupported capability rules
+## 13. System contract
+
+### Type: `System`
+
+Global system-level operations. `System` provides portable heap
+introspection and critical-section entry/exit.
+
+Backend-specific scheduler control, ISR yield, interrupt masking
+details, and board resource management are **not** part of the
+portable `System` trait.
+
+### Heap introspection
+
+```rust
+fn heap_free() -> usize;
+```
+
+Rules:
+
+- `heap_free()` must be callable at any time.
+- `heap_free()` must not panic.
+- The returned value is a snapshot and may become stale immediately.
+- If the backend can report free heap bytes, it should return that
+  value.
+- Host virtual-memory backends such as POSIX may return `usize::MAX`.
+- Mock backends may return `usize::MAX`.
+
+### Critical sections
+
+```rust
+type CriticalSectionGuard: Drop;
+
+fn enter_critical() -> Self::CriticalSectionGuard;
+```
+
+Rules:
+
+- `enter_critical()` enters one critical-section nesting level.
+- Each call returns one guard.
+- Dropping a guard exits one nesting level.
+- Critical sections may be nested.
+- The critical section is fully exited only after **all** nested
+  guards have been dropped.
+- Dropping a guard must not panic.
+- Guard types must not be manually constructible outside the backend
+  implementation.
+- Critical sections are intended for short, infrequent operations
+  only.
+
+### Backend mapping
+
+| Backend   | Critical section implementation | `heap_free()` |
+|-----------|--------------------------------|---------------|
+| Mock      | Atomic nesting counter         | `usize::MAX`  |
+| POSIX     | Process-local recursive `pthread_mutex_t` | `usize::MAX` |
+| FreeRTOS  | Deferred                       | Backend-defined |
+
+### Non-requirements
+
+The portable `System` trait does **not** require:
+
+- scheduler start/stop
+- interrupt enable/disable
+- ISR yield
+- heap region enumeration
+- board memory-region reporting
+- task lifecycle management
+- real-time interrupt masking on host backends
+
+### Contract tests
+
+System contract tests must verify:
+
+1. `heap_free()` is callable.
+2. `enter_critical()` returns a guard.
+3. Dropping the guard exits the critical section.
+4. Nested critical sections are allowed.
+5. Nested guards may be dropped in reverse order.
+
+---
+
+## 14. Unsupported capability rules
 
 Some backends cannot implement every operation. The following rules
 govern how unsupported capabilities must be handled:
@@ -767,12 +848,12 @@ govern how unsupported capabilities must be handled:
 | Task priority | Informational | Deterministic order | Hardware priority |
 | Stack watermark | Not tracked | Not tracked | Hardware tracked |
 | Scheduler start/stop | No-op | Controllable | Hardware scheduler |
-| Critical section | Recursive mutex | Recursive mutex | Interrupt disable |
+| Critical section | Recursive mutex | Atomic counter | Interrupt disable |
 | Suspend/resume task | Not supported | Supported | Supported |
 
 ---
 
-## 14. Mock backend requirements
+## 15. Mock backend requirements
 
 The mock backend (`osal-backend-mock`) is a fully in-memory,
 deterministic implementation used for unit tests and contract
@@ -804,7 +885,7 @@ validated.
 
 ---
 
-## 15. POSIX backend requirements
+## 16. POSIX backend requirements
 
 The POSIX backend (`osal-backend-posix`) implements all OSAL primitives
 using pthread and related POSIX APIs.
@@ -845,7 +926,7 @@ using pthread and related POSIX APIs.
 
 ---
 
-## 16. Conformance test matrix
+## 17. Conformance test matrix
 
 Each behavioral requirement maps to one or more contract tests.
 Backends must pass all non-skipped tests.

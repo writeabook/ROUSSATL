@@ -39,7 +39,7 @@ pub trait System {
     ///
     /// Supports nesting: each [`enter_critical`](System::enter_critical)
     /// call produces a new guard; the critical section is fully exited
-    /// only when the outermost guard is dropped.
+    /// only after **all** nested guards have been dropped.
     type CriticalSectionGuard: Drop;
 
     /// Return the number of free bytes in the heap.
