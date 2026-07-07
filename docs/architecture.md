@@ -65,13 +65,19 @@ everything users need.
 
 Shared implementation that all backends use:
 
-- Object ID allocation and validation
-- Resource registration and lookup tables
-- Common parameter validation
+- Common parameter validation helpers (`validate_queue_capacity`,
+  `validate_send_message_size`, etc.)
+- Close-state tracking (`CloseFlag`)
 - Initialization and lifecycle state management
 
-Without this crate, each backend would reinvent object lifecycle logic,
-leading to inconsistency.
+A global object ID registry and object table are deferred by
+[ADR 0006](adr/0006-object-handle-model.md). The MVP uses strongly
+typed handles (`Queue`, `Mutex<T>`, `Timer`) with
+backend-appropriate ownership (`Arc`, `Rc`, native handles) rather
+than a central numeric-ID registry.
+
+Without this crate, each backend would reinvent validation and
+lifecycle logic, leading to inconsistency.
 
 ### 3.3 `osal-portable` — Reusable Helpers
 
@@ -132,7 +138,7 @@ osal = "0.1"
 
 Responsibilities:
 - Re-export `osal-api` types
-- Select backend via Cargo features (`posix`, `mock`, `freertos`)
+- Select backend via facade Cargo features (`backend-posix`, `backend-mock`, future `backend-freertos`)
 - Guard against multiple-backend selection at compile time
 - Provide `prelude` module for convenient imports
 
@@ -155,15 +161,15 @@ No circular dependencies. Each crate depends only on crates below it.
 
 ```toml
 [features]
-default = ["posix"]        # POSIX backend by default
-posix = ["osal-backend-posix"]
-mock = ["osal-backend-mock"]
+default = ["backend-posix"]
+backend-posix = ["dep:osal-backend-posix"]
+backend-mock = ["dep:osal-backend-mock"]
 ```
 
 Rules:
 - Exactly one backend must be selected at compile time
-- `posix` is the default for development convenience
-- `mock` is used for testing
+- `backend-posix` is the default for development convenience
+- `backend-mock` is used for testing
 
 ### 5.2 Environment features
 

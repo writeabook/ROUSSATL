@@ -50,12 +50,16 @@ osal-bsp + osal-bsp-*   ← 板级支持包
 
 所有后端共用的实现：
 
-- 对象 ID 分配与验证
-- 资源注册与查找表
-- 通用参数校验
+- 通用参数校验辅助（`validate_queue_capacity`、`validate_send_message_size` 等）
+- 关闭状态跟踪（`CloseFlag`）
 - 初始化与生命周期状态管理
 
-没有此 crate，每个后端都会重新发明对象生命周期逻辑，导致不一致。
+全局对象 ID 注册表和对象表由
+[ADR 0006](adr/0006-object-handle-model.md) 推迟。MVP 使用强类型句柄
+（`Queue`、`Mutex<T>`、`Timer`），通过后端自适应的所有权模型
+（`Arc`、`Rc`、原生句柄）而非中心化数字 ID 注册表。
+
+没有此 crate，每个后端都会重新发明校验和生命周期逻辑，导致不一致。
 
 ### 3.3 `osal-portable` — 可复用辅助工具
 
@@ -113,7 +117,7 @@ osal = "0.1"
 
 职责：
 - 重导出 `osal-api` 类型
-- 通过 Cargo features 选择后端（`posix`, `mock`, `freertos`）
+- 通过门面 Cargo features 选择后端（`backend-posix`、`backend-mock`、未来的 `backend-freertos`）
 - 编译时防止多后端同时启用
 - 提供 `prelude` 模块方便导入
 
@@ -136,15 +140,15 @@ osal-api  ←── osal-shared ←── osal-portable ←── osal-backend-p
 
 ```toml
 [features]
-default = ["posix"]        # 默认使用 POSIX 后端
-posix = ["osal-backend-posix"]
-mock = ["osal-backend-mock"]
+default = ["backend-posix"]
+backend-posix = ["dep:osal-backend-posix"]
+backend-mock = ["dep:osal-backend-mock"]
 ```
 
 规则：
 - 编译时必须有且仅有一个后端被启用
-- `posix` 作为默认值方便开发
-- `mock` 用于测试
+- `backend-posix` 作为默认值方便开发
+- `backend-mock` 用于测试
 
 ### 5.2 环境级 features
 
