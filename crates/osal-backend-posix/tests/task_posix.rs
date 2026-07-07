@@ -1,7 +1,7 @@
 //! POSIX-specific task tests: timeout join, repeated join, priority,
 //! handle validity, and invalid-name rejection.
 
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use core::time::Duration;
 
 use osal_api::error::Error;
@@ -124,4 +124,47 @@ fn invalid_name_rejected() {
     let result = PosixTaskBuilder::new().name("bad\0name").spawn(|| {});
 
     assert!(matches!(result, Err(Error::InvalidParameter)));
+}
+
+// ---------------------------------------------------------------------------
+// Drop-without-join does not cancel the task
+// ---------------------------------------------------------------------------
+
+#[test]
+fn drop_without_join_does_not_cancel_task() {
+    static DONE: AtomicBool = AtomicBool::new(false);
+    DONE.store(false, Ordering::SeqCst);
+
+    {
+        let _task = PosixTaskBuilder::new()
+            .name("drop-no-join")
+            .spawn(|| {
+                PosixClock::delay(Duration::from_millis(10));
+                DONE.store(true, Ordering::SeqCst);
+            })
+            .unwrap();
+    }
+
+    PosixClock::delay(Duration::from_millis(50));
+    assert!(DONE.load(Ordering::SeqCst));
+}
+
+#[test]
+fn many_tasks_can_be_dropped_without_join() {
+    use std::sync::Arc;
+
+    let counter = Arc::new(AtomicU32::new(0));
+
+    for _ in 0..100 {
+        let c = Arc::clone(&counter);
+        let _task = PosixTaskBuilder::new()
+            .name("drop-stress")
+            .spawn(move || {
+                c.fetch_add(1, Ordering::Relaxed);
+            })
+            .unwrap();
+    }
+
+    PosixClock::delay(Duration::from_millis(50));
+    assert_eq!(counter.load(Ordering::Relaxed), 100);
 }

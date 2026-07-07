@@ -91,6 +91,14 @@ impl PosixTaskInner {
 
 impl Drop for PosixTaskInner {
     fn drop(&mut self) {
+        // Detach the thread if it was never joined.  This satisfies the
+        // contract that drop does not cancel the task, while preventing
+        // a joinable pthread resource leak.
+        unsafe {
+            if let Some(thread) = (*self.thread.get()).take() {
+                let _ = thread.detach();
+            }
+        }
         TASK_COUNT.fetch_sub(1, Ordering::SeqCst);
     }
 }
@@ -161,12 +169,7 @@ impl PosixTask {
                     Some(Ok(code)) => Ok(code),
                     Some(Err(())) => {
                         drop(guard);
-                        self.do_pthread_join();
-                        let g2 = self.inner.mutex.lock_guard().unwrap();
-                        self.inner.with_state_locked(&g2, |s| match s {
-                            JoinState::Joined(c) => Ok(*c),
-                            _ => Ok(ExitCode::SUCCESS),
-                        })
+                        self.do_pthread_join()
                     }
                     None => Err(Error::Timeout),
                 }
@@ -190,12 +193,7 @@ impl PosixTask {
                         Some(Ok(code)) => return Ok(code),
                         Some(Err(())) => {
                             drop(guard);
-                            self.do_pthread_join();
-                            let g2 = self.inner.mutex.lock_guard().unwrap();
-                            return self.inner.with_state_locked(&g2, |s| match s {
-                                JoinState::Joined(c) => Ok(*c),
-                                _ => Ok(ExitCode::SUCCESS),
-                            });
+                            return self.do_pthread_join();
                         }
                         None => match self.inner.condvar.timed_wait(&mut guard, &deadline) {
                             Err(Error::Timeout) => return Err(Error::Timeout),
@@ -223,12 +221,7 @@ impl PosixTask {
                         Some(Ok(code)) => return Ok(code),
                         Some(Err(())) => {
                             drop(guard);
-                            self.do_pthread_join();
-                            let g2 = self.inner.mutex.lock_guard().unwrap();
-                            return self.inner.with_state_locked(&g2, |s| match s {
-                                JoinState::Joined(c) => Ok(*c),
-                                _ => Ok(ExitCode::SUCCESS),
-                            });
+                            return self.do_pthread_join();
                         }
                         None => {
                             self.inner.condvar.wait(&mut guard).unwrap();
@@ -241,23 +234,24 @@ impl PosixTask {
 
     /// Take the thread handle and call `pthread_join`, then update
     /// the state to `Joined`.  Must be called with the mutex *unlocked*.
-    fn do_pthread_join(&self) {
+    fn do_pthread_join(&self) -> Result<ExitCode> {
         let thread = unsafe { &mut *self.inner.thread.get() };
         if let Some(t) = thread.take() {
-            let _ = t.join();
+            t.join()?;
         }
         let guard = self.inner.mutex.lock_guard().unwrap();
         let code = self.inner.with_state_locked(&guard, |s| {
-            let code = if let JoinState::Finished(c) = s {
-                *c
-            } else {
-                ExitCode::SUCCESS
+            let code = match s {
+                JoinState::Finished(c) => *c,
+                JoinState::Joining => ExitCode::SUCCESS,
+                JoinState::Joined(c) => *c,
+                JoinState::Running => ExitCode::SUCCESS,
             };
             *s = JoinState::Joined(code);
             code
         });
         let _ = self.inner.condvar.broadcast();
-        let _ = code;
+        Ok(code)
     }
 }
 
@@ -347,7 +341,19 @@ impl TaskBuilder for PosixTaskBuilder {
             entry: Some(Box::new(entry)),
         });
 
-        let thread = PosixThread::spawn(task_trampoline, Box::into_raw(start).cast::<c_void>())?;
+        let raw_start = Box::into_raw(start).cast::<c_void>();
+
+        let thread = match PosixThread::spawn(task_trampoline, raw_start) {
+            Ok(t) => t,
+            Err(e) => {
+                // pthread_create failed — reclaim the Box or it leaks.
+                unsafe {
+                    drop(Box::from_raw(raw_start.cast::<TaskStart>()));
+                }
+                TASK_COUNT.fetch_sub(1, Ordering::SeqCst);
+                return Err(e);
+            }
+        };
 
         // Store the thread handle so join() can pick it up.
         unsafe {

@@ -43,18 +43,35 @@ impl PosixThread {
         }
     }
 
-    /// Join the thread.
+    /// Join the thread, consuming this handle.
     ///
     /// Must be called at most once — `pthread_join` is not repeatable.
     /// The higher-level [`crate::task::PosixTask`] guards this with a
     /// completion-state machine.
-    pub fn join(&self) -> Result<()> {
+    pub fn join(self) -> Result<()> {
         let rc = unsafe { libc::pthread_join(self.tid, core::ptr::null_mut()) };
+        // `self` is consumed — PosixThread has no Drop, so nothing to
+        // prevent; the tid value simply goes out of scope.
 
         if rc == 0 {
             Ok(())
         } else {
             Err(Error::Internal("pthread_join failed"))
+        }
+    }
+
+    /// Detach the thread, consuming this handle.
+    ///
+    /// After detach, the thread's resources are automatically reclaimed
+    /// when it exits — no `join` is needed. Use this when dropping a
+    /// `Task` handle without having joined first.
+    pub fn detach(self) -> Result<()> {
+        let rc = unsafe { libc::pthread_detach(self.tid) };
+
+        if rc == 0 {
+            Ok(())
+        } else {
+            Err(Error::Internal("pthread_detach failed"))
         }
     }
 }
