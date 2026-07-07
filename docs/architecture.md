@@ -205,12 +205,16 @@ pub enum Error {
     Timeout,
     QueueFull,
     QueueEmpty,
+    QueueClosed,
+    InvalidMessageSize,
     LockFailed,
+    Overflow,
     NotFound,
     InvalidParameter,
+    AlreadyInitialized,
+    NotInitialized,
     Unsupported,
     Internal(&'static str),
-    // ...
 }
 
 pub type Result<T> = core::result::Result<T, Error>;
@@ -260,11 +264,14 @@ crates/osal-backend-posix/src/
 ├── queue.rs
 ├── timer.rs
 ├── clock.rs
+├── system.rs
 └── sys/            # thin FFI wrappers
-    ├── pthread.rs
     ├── condvar.rs
-    ├── clock.rs
-    └── errno.rs
+    ├── errno.rs
+    ├── mutex.rs
+    ├── recursive_mutex.rs
+    ├── task.rs
+    └── time.rs
 ```
 
 ## 9. Future Backends

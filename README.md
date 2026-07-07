@@ -76,6 +76,7 @@ See [docs/architecture.md](docs/architecture.md) for details.
 - [Semaphore Foundation Slice](docs/semaphore-foundation-slice.md)
 - [Clock and Timer Foundation Slice](docs/clock-timer-foundation-slice.md)
 - [System Foundation Slice](docs/system-foundation-slice.md)
+- [Task Foundation Slice](docs/task-foundation-slice.md)
 
 ### Architecture decisions (ADRs)
 

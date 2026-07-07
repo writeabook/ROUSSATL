@@ -184,16 +184,20 @@ OSAL 使用 `osal-api` 中单一的平铺式 `Error` 枚举：
 
 ```rust
 pub enum Error {
-    OutOfMemory,   // 内存不足
-    Timeout,       // 操作超时
-    QueueFull,     // 队列已满
-    QueueEmpty,    // 队列为空
-    LockFailed,    // 获取锁失败
-    NotFound,      // 资源未找到
-    InvalidParameter, // 无效参数
-    Unsupported,   // 该后端不支持此操作
+    OutOfMemory,        // 内存不足
+    Timeout,            // 操作超时
+    QueueFull,          // 队列已满
+    QueueEmpty,         // 队列为空
+    QueueClosed,        // 队列已关闭
+    InvalidMessageSize, // 消息大小不匹配
+    LockFailed,         // 获取锁失败
+    Overflow,           // 计数或容量溢出
+    NotFound,           // 资源未找到
+    InvalidParameter,   // 无效参数
+    AlreadyInitialized, // 资源已初始化
+    NotInitialized,     // 资源未初始化
+    Unsupported,        // 该后端不支持此操作
     Internal(&'static str), // 内部错误
-    // ...
 }
 
 pub type Result<T> = core::result::Result<T, Error>;
@@ -239,11 +243,14 @@ crates/osal-backend-posix/src/
 ├── queue.rs
 ├── timer.rs
 ├── clock.rs
+├── system.rs
 └── sys/            # 薄 FFI 包装
-    ├── pthread.rs
     ├── condvar.rs
-    ├── clock.rs
-    └── errno.rs
+    ├── errno.rs
+    ├── mutex.rs
+    ├── recursive_mutex.rs
+    ├── task.rs
+    └── time.rs
 ```
 
 ## 9. 添加新后端
