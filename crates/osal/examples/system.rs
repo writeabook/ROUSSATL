@@ -1,6 +1,6 @@
-//! Minimal example demonstrating [`System`] operations.
+//! System example — heap introspection and nested critical section.
 //!
-//! Run with:
+//! Works with any OSAL backend:
 //! ```bash
 //! cargo run -p osal --example system
 //! cargo run -p osal --example system --no-default-features --features backend-mock
@@ -17,7 +17,7 @@ fn main() {
         let _outer = System::enter_critical();
         let _inner = System::enter_critical();
         println!("Inside nested critical section");
-        // Guards drop in reverse order here, each exiting one level.
+        // Guards drop here in reverse order, each exiting one level.
     }
     println!("Outside critical section");
 }
