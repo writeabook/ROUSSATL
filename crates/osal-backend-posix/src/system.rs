@@ -36,8 +36,13 @@ pub struct PosixSystem;
 
 /// RAII guard that unlocks the recursive mutex on drop.
 ///
-/// Created by [`PosixSystem::enter_critical`].
-pub struct PosixCriticalSectionGuard;
+/// Created by [`PosixSystem::enter_critical`]. The private field
+/// prevents external code from constructing a guard without going
+/// through `enter_critical()`, which would unlock a mutex that was
+/// never locked.
+pub struct PosixCriticalSectionGuard {
+    _private: (),
+}
 
 impl Drop for PosixCriticalSectionGuard {
     fn drop(&mut self) {
@@ -61,7 +66,7 @@ impl System for PosixSystem {
     fn enter_critical() -> Self::CriticalSectionGuard {
         ensure_init();
         CRITICAL_MUTEX.lock();
-        PosixCriticalSectionGuard
+        PosixCriticalSectionGuard { _private: () }
     }
 }
 

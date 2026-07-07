@@ -46,24 +46,29 @@ impl PosixRecursiveMutex {
         unsafe {
             let mut attr: libc::pthread_mutexattr_t = MaybeUninit::zeroed().assume_init();
 
-            libc::pthread_mutexattr_init(&raw mut attr);
-            libc::pthread_mutexattr_settype(&raw mut attr, libc::PTHREAD_MUTEX_RECURSIVE);
-            libc::pthread_mutex_init((*self.inner.get()).as_mut_ptr(), &raw const attr);
-            libc::pthread_mutexattr_destroy(&raw mut attr);
+            let mut rc = libc::pthread_mutexattr_init(&raw mut attr);
+            debug_assert_eq!(rc, 0, "pthread_mutexattr_init failed");
+            rc = libc::pthread_mutexattr_settype(&raw mut attr, libc::PTHREAD_MUTEX_RECURSIVE);
+            debug_assert_eq!(
+                rc, 0,
+                "pthread_mutexattr_settype(PTHREAD_MUTEX_RECURSIVE) failed"
+            );
+            rc = libc::pthread_mutex_init((*self.inner.get()).as_mut_ptr(), &raw const attr);
+            debug_assert_eq!(rc, 0, "pthread_mutex_init failed");
+            rc = libc::pthread_mutexattr_destroy(&raw mut attr);
+            debug_assert_eq!(rc, 0, "pthread_mutexattr_destroy failed");
         }
     }
 
     /// Acquire the recursive lock. Blocks until acquired.
     pub fn lock(&self) {
-        unsafe {
-            libc::pthread_mutex_lock((*self.inner.get()).as_mut_ptr());
-        }
+        let rc = unsafe { libc::pthread_mutex_lock((*self.inner.get()).as_mut_ptr()) };
+        debug_assert_eq!(rc, 0, "pthread_mutex_lock failed");
     }
 
     /// Release one level of the recursive lock.
     pub fn unlock(&self) {
-        unsafe {
-            libc::pthread_mutex_unlock((*self.inner.get()).as_mut_ptr());
-        }
+        let rc = unsafe { libc::pthread_mutex_unlock((*self.inner.get()).as_mut_ptr()) };
+        debug_assert_eq!(rc, 0, "pthread_mutex_unlock failed");
     }
 }

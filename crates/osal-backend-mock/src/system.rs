@@ -36,8 +36,12 @@ pub struct MockSystem;
 
 /// RAII guard that decrements [`CRITICAL_DEPTH`] on drop.
 ///
-/// Created by [`MockSystem::enter_critical`].
-pub struct MockCriticalSectionGuard;
+/// Created by [`MockSystem::enter_critical`]. The private field
+/// prevents external code from constructing a guard without going
+/// through `enter_critical()`, which would underflow the counter.
+pub struct MockCriticalSectionGuard {
+    _private: (),
+}
 
 impl Drop for MockCriticalSectionGuard {
     fn drop(&mut self) {
@@ -60,7 +64,7 @@ impl System for MockSystem {
 
     fn enter_critical() -> Self::CriticalSectionGuard {
         CRITICAL_DEPTH.fetch_add(1, Ordering::SeqCst);
-        MockCriticalSectionGuard
+        MockCriticalSectionGuard { _private: () }
     }
 }
 
