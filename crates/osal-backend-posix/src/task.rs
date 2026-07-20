@@ -233,22 +233,17 @@ impl PosixTask {
     fn join_inner(&self, timeout: Timeout) -> Result<ExitCode> {
         match timeout {
             Timeout::NoWait => {
+                // NoWait must never block.  Joined → cached code;
+                // Finished but unreaped → return code without joining
+                // (the thread will be reaped by a subsequent Forever
+                // join or by Drop detach).
                 let guard = self.inner.mutex.lock_guard().unwrap();
-                let needs_join = self.inner.with_state_locked(&guard, |state| match state {
-                    JoinState::Joined(code) => Some(Ok(*code)),
-                    JoinState::Finished(_code) => {
-                        *state = JoinState::Joining;
-                        Some(Err(()))
-                    }
+                match self.inner.with_state_locked(&guard, |state| match state {
+                    JoinState::Joined(code) => Some(*code),
+                    JoinState::Finished(code) => Some(*code),
                     _ => None,
-                });
-
-                match needs_join {
-                    Some(Ok(code)) => Ok(code),
-                    Some(Err(())) => {
-                        drop(guard);
-                        self.do_pthread_join()
-                    }
+                }) {
+                    Some(code) => Ok(code),
                     None => Err(Error::Timeout),
                 }
             }
@@ -312,24 +307,51 @@ impl PosixTask {
 
     /// Take the thread handle and call `pthread_join`, then update
     /// the state to `Joined`.  Must be called with the mutex *unlocked*.
+    ///
+    /// On `pthread_join` failure, restores the state to `Finished(code)`
+    /// and wakes other waiters so the system does not hang permanently.
     fn do_pthread_join(&self) -> Result<ExitCode> {
         let thread = unsafe { &mut *self.inner.thread.get() };
-        if let Some(t) = thread.take() {
-            t.join()?;
-        }
+        let join_result = if let Some(t) = thread.take() {
+            t.join()
+        } else {
+            Ok(())
+        };
+
         let guard = self.inner.mutex.lock_guard().unwrap();
-        let code = self.inner.with_state_locked(&guard, |s| {
-            let code = match s {
-                JoinState::Finished(c) => *c,
-                JoinState::Joining => ExitCode::SUCCESS,
-                JoinState::Joined(c) => *c,
-                JoinState::Running => ExitCode::SUCCESS,
-            };
-            *s = JoinState::Joined(code);
-            code
-        });
-        let _ = self.inner.condvar.broadcast();
-        Ok(code)
+        match join_result {
+            Ok(()) => {
+                let code = self.inner.with_state_locked(&guard, |s| {
+                    let code = match s {
+                        JoinState::Finished(c) => *c,
+                        JoinState::Joining => ExitCode::SUCCESS,
+                        JoinState::Joined(c) => *c,
+                        JoinState::Running => ExitCode::SUCCESS,
+                    };
+                    *s = JoinState::Joined(code);
+                    code
+                });
+                let _ = self.inner.condvar.broadcast();
+                Ok(code)
+            }
+            Err(e) => {
+                // pthread_join failed — restore Finished state so
+                // waiters can retry or a subsequent joiner can
+                // attempt again.
+                let _code = self.inner.with_state_locked(&guard, |s| {
+                    let code = match s {
+                        JoinState::Finished(c) => *c,
+                        JoinState::Joining => ExitCode::SUCCESS,
+                        JoinState::Joined(c) => *c,
+                        _ => ExitCode::SUCCESS,
+                    };
+                    *s = JoinState::Finished(code);
+                    code
+                });
+                let _ = self.inner.condvar.broadcast();
+                Err(e)
+            }
+        }
     }
 }
 

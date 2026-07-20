@@ -36,19 +36,26 @@ impl PosixThread {
         entry: RawTaskEntry,
         arg: *mut c_void,
     ) -> Result<Self> {
+        // Normalize stack size to platform minimum.
+        let stack = if config.stack_size < libc::PTHREAD_STACK_MIN {
+            libc::PTHREAD_STACK_MIN
+        } else {
+            config.stack_size
+        };
+
         unsafe {
             let mut attr: libc::pthread_attr_t = MaybeUninit::zeroed().assume_init();
-            let mut rc = libc::pthread_attr_init(&raw mut attr);
-            debug_assert_eq!(rc, 0, "pthread_attr_init failed");
 
-            // Set stack size, rounding up to platform minimum.
-            let stack = if config.stack_size < libc::PTHREAD_STACK_MIN {
-                libc::PTHREAD_STACK_MIN
-            } else {
-                config.stack_size
-            };
+            let mut rc = libc::pthread_attr_init(&raw mut attr);
+            if rc != 0 {
+                return Err(Error::Internal("pthread_attr_init failed"));
+            }
+
             rc = libc::pthread_attr_setstacksize(&raw mut attr, stack);
-            debug_assert_eq!(rc, 0, "pthread_attr_setstacksize failed");
+            if rc != 0 {
+                libc::pthread_attr_destroy(&raw mut attr);
+                return Err(Error::InvalidParameter);
+            }
 
             let mut tid = MaybeUninit::<libc::pthread_t>::uninit();
             rc = libc::pthread_create(tid.as_mut_ptr(), &attr, entry, arg);

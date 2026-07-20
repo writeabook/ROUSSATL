@@ -13,8 +13,9 @@
 
 use alloc::string::String;
 use alloc::sync::Arc;
-use core::cell::UnsafeCell;
+use core::cell::Cell;
 use core::sync::atomic::{AtomicUsize, Ordering};
+use std::thread_local;
 
 use osal_api::error::{Error, Result};
 use osal_api::time::Timeout;
@@ -33,13 +34,12 @@ static NEXT_HANDLE: AtomicUsize = AtomicUsize::new(1);
 static LIVE_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 // ---------------------------------------------------------------------------
-// Current-task slot (single-threaded Mock — unsafeCell is sufficient)
+// Per-thread current-task slot
 // ---------------------------------------------------------------------------
 
-struct CurrentSlot(UnsafeCell<Option<TaskHandle>>);
-unsafe impl Sync for CurrentSlot {}
-
-static CURRENT: CurrentSlot = CurrentSlot(UnsafeCell::new(None));
+thread_local! {
+    static CURRENT: Cell<Option<TaskHandle>> = const { Cell::new(None) };
+}
 
 struct CurrentGuard {
     prev: Option<TaskHandle>,
@@ -47,20 +47,14 @@ struct CurrentGuard {
 
 impl CurrentGuard {
     fn enter(handle: TaskHandle) -> Self {
-        // Safety: Mock tasks are single-threaded; no concurrent access.
-        let prev = unsafe {
-            let slot = &mut *CURRENT.0.get();
-            let old = *slot;
-            *slot = Some(handle);
-            old
-        };
+        let prev = CURRENT.with(|slot| slot.replace(Some(handle)));
         Self { prev }
     }
 }
 
 impl Drop for CurrentGuard {
     fn drop(&mut self) {
-        unsafe { *CURRENT.0.get() = self.prev; }
+        CURRENT.with(|slot| slot.set(self.prev));
     }
 }
 
@@ -135,8 +129,7 @@ impl Task for MockTask {
     }
 
     fn current() -> Option<TaskHandle> {
-        // Safety: Mock tasks are single-threaded.
-        unsafe { *CURRENT.0.get() }
+        CURRENT.with(Cell::get)
     }
 
     fn count() -> usize {
