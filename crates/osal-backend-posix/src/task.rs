@@ -22,28 +22,99 @@
 //!
 //! Timeout join is implemented through `pthread_cond_timedwait` on
 //! the completion state rather than non-portable `pthread_timedjoin_np`.
+//!
+//! # P6A: TLS, live count, stack size
+//!
+//! A `thread_local!` slot provides `current()` via `CurrentGuard` set
+//! in the trampoline. A `LiveTaskToken` ensures `count()` reflects
+//! running entries, not handle lifecycle. Stack size is passed through
+//! `pthread_attr_setstacksize`.
 
 use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::sync::Arc;
-use core::cell::UnsafeCell;
+use core::cell::{Cell, UnsafeCell};
 use core::ffi::c_void;
+use std::thread_local;
 use core::sync::atomic::{AtomicUsize, Ordering};
+
 use osal_api::error::{Error, Result};
 use osal_api::time::Timeout;
 use osal_api::traits::task::{Task, TaskBuilder};
-use osal_api::types::{ExitCode, Handle, Priority};
+use osal_api::types::{ExitCode, Priority, TaskHandle};
 
 use crate::sys::condvar::{self, PosixCondvar};
 use crate::sys::mutex::{PosixMutex, PosixMutexGuard};
 use crate::sys::task::PosixThread;
+
+use osal_shared::validation;
 
 // ---------------------------------------------------------------------------
 // Global state
 // ---------------------------------------------------------------------------
 
 static NEXT_HANDLE: AtomicUsize = AtomicUsize::new(1);
-static TASK_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+/// Number of tasks whose entry function has not yet completed.
+static LIVE_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+// ---------------------------------------------------------------------------
+// Backend-local TLS for current()
+// ---------------------------------------------------------------------------
+
+thread_local! {
+    static CURRENT: Cell<Option<TaskHandle>> = const { Cell::new(None) };
+}
+
+struct CurrentGuard {
+    prev: Option<TaskHandle>,
+}
+
+impl CurrentGuard {
+    fn enter(handle: TaskHandle) -> Self {
+        let prev = CURRENT.with(|slot| slot.replace(Some(handle)));
+        Self { prev }
+    }
+}
+
+impl Drop for CurrentGuard {
+    fn drop(&mut self) {
+        CURRENT.with(|slot| slot.set(self.prev));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Live task token
+// ---------------------------------------------------------------------------
+
+/// RAII guard: increments `LIVE_COUNT` on creation, decrements on drop.
+struct LiveTaskToken;
+
+impl LiveTaskToken {
+    fn register() -> Self {
+        LIVE_COUNT.fetch_add(1, Ordering::SeqCst);
+        Self
+    }
+}
+
+impl Drop for LiveTaskToken {
+    fn drop(&mut self) {
+        LIVE_COUNT.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Handle allocation
+// ---------------------------------------------------------------------------
+
+fn allocate_task_handle() -> Result<TaskHandle> {
+    let raw = NEXT_HANDLE
+        .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
+            current.checked_add(1)
+        })
+        .map_err(|_| Error::Overflow)?;
+    TaskHandle::from_raw(raw).ok_or(Error::Overflow)
+}
 
 // ---------------------------------------------------------------------------
 // Completion state
@@ -66,7 +137,7 @@ enum JoinState {
 // ---------------------------------------------------------------------------
 
 struct PosixTaskInner {
-    handle: Handle,
+    handle: TaskHandle,
     priority: Priority,
     thread: UnsafeCell<Option<PosixThread>>,
     mutex: PosixMutex,
@@ -87,6 +158,13 @@ impl PosixTaskInner {
         // Safety: the caller holds self.mutex.
         unsafe { f(&mut *self.state.get()) }
     }
+
+    fn set_finished(&self, code: ExitCode) {
+        let guard = self.mutex.lock_guard().unwrap();
+        self.with_state_locked(&guard, |state| {
+            *state = JoinState::Finished(code);
+        });
+    }
 }
 
 impl Drop for PosixTaskInner {
@@ -94,12 +172,13 @@ impl Drop for PosixTaskInner {
         // Detach the thread if it was never joined.  This satisfies the
         // contract that drop does not cancel the task, while preventing
         // a joinable pthread resource leak.
+        // Note: LIVE_COUNT is NOT decremented here — that is handled
+        // by LiveTaskToken in the trampoline.
         unsafe {
             if let Some(thread) = (*self.thread.get()).take() {
                 let _ = thread.detach();
             }
         }
-        TASK_COUNT.fetch_sub(1, Ordering::SeqCst);
     }
 }
 
@@ -111,26 +190,28 @@ impl Drop for PosixTaskInner {
 struct TaskStart {
     inner: Arc<PosixTaskInner>,
     entry: Option<Box<dyn FnOnce() + Send + 'static>>,
-}
-
-impl TaskStart {
-    fn mark_finished(&self, code: ExitCode) {
-        let guard = self.inner.mutex.lock_guard().unwrap();
-        self.inner.with_state_locked(&guard, |state| {
-            *state = JoinState::Finished(code);
-        });
-        let _ = self.inner.condvar.broadcast();
-    }
+    live_token: Option<LiveTaskToken>,
 }
 
 extern "C" fn task_trampoline(arg: *mut c_void) -> *mut c_void {
     let mut start: Box<TaskStart> = unsafe { Box::from_raw(arg.cast()) };
 
+    // Set TLS context so current() works inside the entry.
+    let _context = CurrentGuard::enter(start.inner.handle);
+
     if let Some(entry) = start.entry.take() {
         entry();
     }
 
-    start.mark_finished(ExitCode::SUCCESS);
+    // Mark finished BEFORE dropping the live token, so joiners see the
+    // correct state.
+    start.inner.set_finished(ExitCode::SUCCESS);
+
+    // Drop live token — count() decrements after the entry is done.
+    start.live_token.take();
+
+    // Wake any blocked joiners.
+    let _ = start.inner.condvar.broadcast();
 
     core::ptr::null_mut()
 }
@@ -152,9 +233,6 @@ impl PosixTask {
     fn join_inner(&self, timeout: Timeout) -> Result<ExitCode> {
         match timeout {
             Timeout::NoWait => {
-                // Check state under lock.  Use a raw lock/with_state
-                // approach so we can transition Finished → Joining
-                // in the same critical section.
                 let guard = self.inner.mutex.lock_guard().unwrap();
                 let needs_join = self.inner.with_state_locked(&guard, |state| match state {
                     JoinState::Joined(code) => Some(Ok(*code)),
@@ -260,7 +338,7 @@ impl Task for PosixTask {
         self.join_inner(timeout)
     }
 
-    fn handle(&self) -> Handle {
+    fn handle(&self) -> TaskHandle {
         self.inner.handle
     }
 
@@ -268,13 +346,12 @@ impl Task for PosixTask {
         self.inner.priority
     }
 
-    fn current() -> Handle {
-        // POSIX backend does not track OSAL-task identity per thread.
-        0
+    fn current() -> Option<TaskHandle> {
+        CURRENT.with(Cell::get)
     }
 
     fn count() -> usize {
-        TASK_COUNT.load(Ordering::SeqCst)
+        LIVE_COUNT.load(Ordering::SeqCst)
     }
 }
 
@@ -307,7 +384,7 @@ impl TaskBuilder for PosixTaskBuilder {
     }
 
     fn stack_size(mut self, bytes: usize) -> Self {
-        self.stack_size = bytes.max(512);
+        self.stack_size = bytes;
         self
     }
 
@@ -320,33 +397,38 @@ impl TaskBuilder for PosixTaskBuilder {
     where
         F: FnOnce() + Send + 'static,
     {
-        if self.name.as_bytes().contains(&0) {
-            return Err(Error::InvalidParameter);
-        }
+        validation::validate_task_config(&self.name, self.stack_size)?;
 
-        let handle = NEXT_HANDLE.fetch_add(1, Ordering::SeqCst);
-        TASK_COUNT.fetch_add(1, Ordering::SeqCst);
+        // All fallible resources first.
+        let mutex = PosixMutex::new()?;
+        let condvar = PosixCondvar::new()?;
+        let handle = allocate_task_handle()?;
 
         let inner = Arc::new(PosixTaskInner {
             handle,
             priority: self.priority,
             thread: UnsafeCell::new(None),
-            mutex: PosixMutex::new()?,
-            condvar: PosixCondvar::new()?,
+            mutex,
+            condvar,
             state: UnsafeCell::new(JoinState::Running),
         });
 
         let start = Box::new(TaskStart {
             inner: Arc::clone(&inner),
             entry: Some(Box::new(entry)),
+            live_token: Some(LiveTaskToken::register()),
         });
 
         let raw_start = Box::into_raw(start).cast::<c_void>();
 
-        let thread = match PosixThread::spawn(task_trampoline, raw_start) {
+        let cfg = crate::sys::task::PosixThreadConfig {
+            stack_size: self.stack_size,
+        };
+        let thread = match PosixThread::spawn(&cfg, task_trampoline, raw_start) {
             Ok(t) => t,
             Err(e) => {
-                // pthread_create failed — reclaim the Box or it leaks.
+                // pthread_create failed — reclaim the Box.
+                // LiveTaskToken drop will roll back the count.
                 unsafe {
                     drop(Box::from_raw(raw_start.cast::<TaskStart>()));
                 }

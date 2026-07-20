@@ -1,8 +1,8 @@
-//! POSIX-specific task tests: timeout join, repeated join, priority,
-//! handle validity, and invalid-name rejection.
+//! POSIX-specific task tests: timeout join, concurrency, drop-without-join.
 
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use core::time::Duration;
+use std::sync::Arc;
 
 use osal_api::error::Error;
 use osal_api::time::Timeout;
@@ -36,7 +36,6 @@ fn join_after_times_out_then_can_retry() {
     assert!(result.is_ok());
     assert!(DONE.load(Ordering::SeqCst));
 
-    // Repeated join after completion.
     let result = task.join(Timeout::NoWait);
     assert!(result.is_ok());
 }
@@ -54,7 +53,6 @@ fn join_no_wait_times_out_while_running() {
         })
         .unwrap();
 
-    // Spin until the task marks itself running.
     while !RUNNING.load(Ordering::SeqCst) {
         PosixClock::delay(Duration::from_millis(1));
     }
@@ -69,7 +67,7 @@ fn join_no_wait_times_out_while_running() {
 fn join_forever_returns_after_completion() {
     let task = PosixTaskBuilder::new()
         .name("forever")
-        .spawn(|| { /* immediate */ })
+        .spawn(|| {})
         .unwrap();
 
     let result = task.join(Timeout::Forever);
@@ -115,19 +113,18 @@ fn priority_is_preserved() {
 fn handle_is_nonzero() {
     let task = PosixTaskBuilder::new().name("handle").spawn(|| {}).unwrap();
 
-    assert_ne!(task.handle(), 0);
+    assert_ne!(task.handle().get(), 0);
     task.join(Timeout::Forever).unwrap();
 }
 
 #[test]
 fn invalid_name_rejected() {
     let result = PosixTaskBuilder::new().name("bad\0name").spawn(|| {});
-
     assert!(matches!(result, Err(Error::InvalidParameter)));
 }
 
 // ---------------------------------------------------------------------------
-// Drop-without-join does not cancel the task
+// Drop-without-join does not cancel
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -151,8 +148,6 @@ fn drop_without_join_does_not_cancel_task() {
 
 #[test]
 fn many_tasks_can_be_dropped_without_join() {
-    use std::sync::Arc;
-
     let counter = Arc::new(AtomicU32::new(0));
 
     for _ in 0..100 {

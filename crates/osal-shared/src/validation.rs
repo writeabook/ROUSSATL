@@ -46,6 +46,33 @@ pub fn validate_recv_buffer_size(expected: usize, actual: usize) -> Result<()> {
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Task validation
+// ---------------------------------------------------------------------------
+
+/// Maximum task name length in bytes (UTF-8).
+pub const TASK_NAME_MAX_BYTES: usize = 31;
+
+/// Validate task configuration parameters.
+///
+/// Called at the top of `TaskBuilder::spawn()`. Returns
+/// `Error::InvalidParameter` if:
+/// - `name` exceeds `TASK_NAME_MAX_BYTES` bytes
+/// - `name` contains embedded NUL bytes
+/// - `stack_size == 0`
+pub fn validate_task_config(name: &str, stack_size: usize) -> Result<()> {
+    if name.len() > TASK_NAME_MAX_BYTES {
+        return Err(Error::InvalidParameter);
+    }
+    if name.as_bytes().contains(&0) {
+        return Err(Error::InvalidParameter);
+    }
+    if stack_size == 0 {
+        return Err(Error::InvalidParameter);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -106,5 +133,43 @@ mod tests {
     #[test]
     fn accept_recv_correct_size() {
         assert!(validate_recv_buffer_size(4, 4).is_ok());
+    }
+
+    // --- task validation ---
+
+    #[test]
+    fn accept_empty_task_name() {
+        assert!(validate_task_config("", 4096).is_ok());
+    }
+
+    #[test]
+    fn reject_nul_in_task_name() {
+        assert!(matches!(
+            validate_task_config("bad\0name", 4096),
+            Err(Error::InvalidParameter)
+        ));
+    }
+
+    #[test]
+    fn reject_overlong_task_name() {
+        let name = "a".repeat(32);
+        assert!(matches!(
+            validate_task_config(&name, 4096),
+            Err(Error::InvalidParameter)
+        ));
+    }
+
+    #[test]
+    fn accept_max_length_task_name() {
+        let name = "a".repeat(31);
+        assert!(validate_task_config(&name, 4096).is_ok());
+    }
+
+    #[test]
+    fn reject_zero_stack_size() {
+        assert!(matches!(
+            validate_task_config("task", 0),
+            Err(Error::InvalidParameter)
+        ));
     }
 }

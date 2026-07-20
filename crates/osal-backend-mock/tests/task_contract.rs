@@ -8,7 +8,7 @@
 use osal_backend_mock::task::MockTaskFactory;
 
 #[test]
-fn mock_task_smoke_contracts() {
+fn mock_task_core_contracts() {
     let factory = MockTaskFactory;
-    osal_testkit::contract::task::run_smoke_contracts(&factory);
+    osal_testkit::contract::task::run_core_contracts(&factory);
 }

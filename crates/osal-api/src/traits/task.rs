@@ -5,7 +5,7 @@
 
 use crate::error::Result;
 use crate::time::Timeout;
-use crate::types::{ExitCode, Handle, Priority};
+use crate::types::{ExitCode, Priority, TaskHandle};
 
 /// An independent execution context (thread / RTOS task).
 ///
@@ -16,12 +16,15 @@ use crate::types::{ExitCode, Handle, Priority};
 /// # Lifecycle
 ///
 /// ```text
-/// TaskBuilder::new() → .name(...) → .spawn(entry) → Task (Ready)
-///                                                        ↓
-///                                                   Running
-///                                                        ↓
-///                                              join() → ExitCode
+/// TaskBuilder::new() → .name(...) → .spawn(entry) → Task
+///                                                     ↓
+///                                                Running
+///                                                     ↓
+///                                           join() → ExitCode
 /// ```
+///
+/// After a successful `spawn()`, the task may already be `Running` or
+/// even `Finished`; portable code must not assume it is still `Ready`.
 ///
 /// # Examples
 ///
@@ -44,21 +47,29 @@ pub trait Task: Sized {
     ///
     /// Returns `Error::Timeout` if the task did not exit within
     /// `timeout`. The caller retains the handle and may retry.
-    /// Returns `Error::NotInitialized` if the task was never started.
     fn join(&self, timeout: Timeout) -> Result<ExitCode>;
 
-    /// Return the opaque handle identifying this task.
-    fn handle(&self) -> Handle;
+    /// Return the opaque, non-zero handle identifying this task.
+    fn handle(&self) -> TaskHandle;
 
     /// Return the task's configured priority.
     fn priority(&self) -> Priority;
 
     // ---- static methods ----
 
-    /// Return the handle of the currently executing task.
-    fn current() -> Handle;
+    /// Return the handle of the currently executing OSAL task.
+    ///
+    /// Returns `Some(TaskHandle)` when called from within an
+    /// OSAL-created task's entry function. Returns `None` from the
+    /// main thread or any non-OSAL context.
+    fn current() -> Option<TaskHandle>;
 
-    /// Return the number of tasks currently known to the system.
+    /// Return the number of OSAL tasks whose entry function has not
+    /// yet completed.
+    ///
+    /// Finished tasks whose handle still exists are **not** counted.
+    /// This is a snapshot for diagnostics only — do not use for
+    /// concurrency synchronisation.
     fn count() -> usize;
 }
 

@@ -11,7 +11,7 @@
 
 pub use crate::error::{Error, Result};
 pub use crate::time::Timeout;
-pub use crate::types::{ExitCode, Handle, Priority, StackSize, TaskState, TimerMode};
+pub use crate::types::{ExitCode, Handle, Priority, StackSize, TaskHandle, TaskState, TimerMode};
 
 pub use crate::traits::clock::Clock;
 pub use crate::traits::mutex::Mutex;

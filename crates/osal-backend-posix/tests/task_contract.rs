@@ -8,7 +8,7 @@
 use osal_backend_posix::task::PosixTaskFactory;
 
 #[test]
-fn posix_task_smoke_contracts() {
+fn posix_task_core_contracts() {
     let factory = PosixTaskFactory;
-    osal_testkit::contract::task::run_smoke_contracts(&factory);
+    osal_testkit::contract::task::run_core_contracts(&factory);
 }

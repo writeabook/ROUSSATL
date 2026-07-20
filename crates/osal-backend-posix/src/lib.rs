@@ -8,6 +8,7 @@
 #![no_std]
 
 extern crate alloc;
+extern crate std;
 
 pub mod clock;
 pub mod mutex;

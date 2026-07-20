@@ -9,6 +9,32 @@
 /// is backend-defined; portable code should treat handles as opaque.
 pub type Handle = usize;
 
+/// Opaque logical identifier for an OSAL task.
+///
+/// Wraps a non-zero `usize`. `TaskHandle` is the primary task identity
+/// used by [`Task::handle`] and [`Task::current`]. Zero is reserved so
+/// that `Option<TaskHandle>` is the same size as `usize`.
+#[repr(transparent)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TaskHandle(core::num::NonZeroUsize);
+
+impl TaskHandle {
+    /// Create a `TaskHandle` from a raw `usize`.
+    ///
+    /// Returns `None` if `raw == 0`.
+    pub const fn from_raw(raw: usize) -> Option<Self> {
+        match core::num::NonZeroUsize::new(raw) {
+            Some(value) => Some(Self(value)),
+            None => None,
+        }
+    }
+
+    /// Return the raw `usize` value.
+    pub const fn get(self) -> usize {
+        self.0.get()
+    }
+}
+
 /// Task/thread priority value. Higher values indicate higher priority.
 pub type Priority = u32;
 
