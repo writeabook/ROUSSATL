@@ -13,6 +13,3 @@ crate-type = ["rlib"]
 [features]
 default = []
 std = []
-
-[dependencies]
-osal-api = { path = "../osal-api" }

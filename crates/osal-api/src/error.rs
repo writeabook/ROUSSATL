@@ -49,6 +49,8 @@ pub enum Error {
     AlreadyInitialized,
     /// The resource has not been initialized.
     NotInitialized,
+    /// The runtime or resource is busy — active objects prevent shutdown.
+    Busy,
     /// The operation is not supported on this backend.
     Unsupported,
     /// A general internal error occurred.

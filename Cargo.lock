@@ -56,9 +56,6 @@ dependencies = [
 [[package]]
 name = "osal-bsp"
 version = "0.1.0"
-dependencies = [
- "osal-api",
-]
 
 [[package]]
 name = "osal-bsp-linux"
