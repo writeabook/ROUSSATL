@@ -5,10 +5,12 @@
 //!
 //! Split into:
 //! - `TaskCoreContract` — both Mock and POSIX must pass
-//! - `TaskConcurrencyContract` — POSIX only
+//! - `TaskConcurrencyContract` — POSIX only (defined here, called
+//!   from backend-specific test files)
 
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicUsize, Ordering};
 
+use osal_api::error::Error;
 use osal_api::time::Timeout;
 use osal_api::traits::task::{Task as _, TaskBuilder as _};
 
@@ -30,40 +32,53 @@ pub fn accept_empty_name<F: TaskFactory>(factory: &F) {
     task.join(Timeout::Forever).unwrap();
 }
 
-/// Name containing NUL is rejected.
-pub fn reject_nul_in_name<F: TaskFactory>(factory: &F) {
-    let result = factory.task_builder().name("bad\0name").spawn(|| {});
-    assert!(result.is_err());
+/// Name of exactly 31 bytes is valid.
+pub fn accept_max_length_name<F: TaskFactory>(factory: &F) {
+    let max_name = "a".repeat(31);
+    let task = factory.task_builder().name(&max_name).spawn(|| {}).unwrap();
+    task.join(Timeout::Forever).unwrap();
 }
 
-/// Name > 31 bytes is rejected.
+/// Name containing NUL is rejected with precise error.
+pub fn reject_nul_in_name<F: TaskFactory>(factory: &F) {
+    let result = factory.task_builder().name("bad\0name").spawn(|| {});
+    assert!(matches!(result, Err(Error::InvalidParameter)));
+}
+
+/// Name > 31 bytes is rejected with precise error.
 pub fn reject_overlong_name<F: TaskFactory>(factory: &F) {
     let long = "a".repeat(32);
     let result = factory.task_builder().name(&long).spawn(|| {});
-    assert!(result.is_err());
+    assert!(matches!(result, Err(Error::InvalidParameter)));
 }
 
-/// Zero stack size is rejected.
+/// Zero stack size is rejected with precise error.
 pub fn reject_zero_stack<F: TaskFactory>(factory: &F) {
     let result = factory.task_builder().stack_size(0).spawn(|| {});
-    assert!(result.is_err());
+    assert!(matches!(result, Err(Error::InvalidParameter)));
+}
+
+/// Positive stack size creates successfully.
+pub fn positive_stack_size_succeeds<F: TaskFactory>(factory: &F) {
+    let task = factory.task_builder().stack_size(8192).spawn(|| {}).unwrap();
+    task.join(Timeout::Forever).unwrap();
 }
 
 /// Spawned task runs its entry exactly once.
-pub fn spawn_runs_entry_once<F: TaskFactory>(factory: &F) {
-    static FLAG: AtomicBool = AtomicBool::new(false);
-    FLAG.store(false, Ordering::SeqCst);
+pub fn spawn_runs_entry_exactly_once<F: TaskFactory>(factory: &F) {
+    static COUNTER: AtomicUsize = AtomicUsize::new(0);
+    COUNTER.store(0, Ordering::SeqCst);
 
     let task = factory
         .task_builder()
-        .name("smoke")
+        .name("exact")
         .spawn(|| {
-            FLAG.store(true, Ordering::SeqCst);
+            COUNTER.fetch_add(1, Ordering::SeqCst);
         })
         .unwrap();
 
     task.join(Timeout::Forever).unwrap();
-    assert!(FLAG.load(Ordering::SeqCst));
+    assert_eq!(COUNTER.load(Ordering::SeqCst), 1);
 }
 
 /// join() returns after task exit.
@@ -75,9 +90,11 @@ pub fn join_returns_after_task_exit<F: TaskFactory>(factory: &F) {
 /// Repeated join after completion returns cached immediately.
 pub fn repeated_join_returns_cached<F: TaskFactory>(factory: &F) {
     let task = factory.task_builder().name("repeat").spawn(|| {}).unwrap();
-    task.join(Timeout::Forever).unwrap();
-    task.join(Timeout::NoWait).unwrap();
-    task.join(Timeout::Forever).unwrap();
+    let r1 = task.join(Timeout::Forever).unwrap();
+    let r2 = task.join(Timeout::NoWait).unwrap();
+    let r3 = task.join(Timeout::Forever).unwrap();
+    assert_eq!(r1, r2);
+    assert_eq!(r2, r3);
 }
 
 /// handle() is non-zero.
@@ -96,8 +113,6 @@ pub fn handle_is_unique<F: TaskFactory>(factory: &F) {
 
 /// current() returns Some(handle) from within the entry.
 pub fn current_from_within_task<F: TaskFactory>(factory: &F) {
-    use core::sync::atomic::AtomicUsize;
-
     static CAPTURED_RAW: AtomicUsize = AtomicUsize::new(0);
 
     let task = factory
@@ -123,11 +138,7 @@ pub fn current_from_main_is_none<F: TaskFactory>(_factory: &F) {
 
 /// Priority is preserved.
 pub fn priority_is_preserved<F: TaskFactory>(factory: &F) {
-    let task = factory
-        .task_builder()
-        .priority(7)
-        .spawn(|| {})
-        .unwrap();
+    let task = factory.task_builder().priority(7).spawn(|| {}).unwrap();
     assert_eq!(task.priority(), 7);
     task.join(Timeout::Forever).unwrap();
     assert_eq!(task.priority(), 7);
@@ -135,38 +146,55 @@ pub fn priority_is_preserved<F: TaskFactory>(factory: &F) {
 
 /// count() reflects a running entry and returns to baseline after.
 pub fn count_reflects_live_tasks<F: TaskFactory>(factory: &F) {
-    let baseline = F::Task::count();
+    static INSIDE_COUNT: AtomicUsize = AtomicUsize::new(0);
+    INSIDE_COUNT.store(0, Ordering::SeqCst);
 
-    static BARRIER: AtomicBool = AtomicBool::new(false);
-    BARRIER.store(false, Ordering::SeqCst);
+    let baseline = F::Task::count();
 
     let task = factory
         .task_builder()
         .name("count")
         .spawn(|| {
-            BARRIER.store(true, Ordering::SeqCst);
+            INSIDE_COUNT.store(F::Task::count(), Ordering::SeqCst);
         })
         .unwrap();
 
     task.join(Timeout::Forever).unwrap();
-    assert!(BARRIER.load(Ordering::SeqCst));
 
-    // After join, count should be back to baseline.
+    // Inside the entry, at least baseline + 1.
+    let inside = INSIDE_COUNT.load(Ordering::SeqCst);
+    assert!(inside > baseline, "inside={inside} baseline={baseline}");
+
+    // After join, count back to baseline.
     assert_eq!(F::Task::count(), baseline);
+}
+
+/// Task finished but handle still alive → count() already back to baseline.
+pub fn finished_task_not_in_count<F: TaskFactory>(factory: &F) {
+    let baseline = F::Task::count();
+
+    let task = factory.task_builder().name("fin").spawn(|| {}).unwrap();
+    task.join(Timeout::Forever).unwrap();
+
+    // Task is finished, handle still alive.
+    assert_eq!(F::Task::count(), baseline);
+    drop(task);
 }
 
 // ---------------------------------------------------------------------------
 // Grouped entry points
 // ---------------------------------------------------------------------------
 
-/// Core contract — both Mock and POSIX.
+/// Core contract — both Mock and POSIX (14 tests).
 pub fn run_core_contracts<F: TaskFactory>(factory: &F) {
     create_with_default_config::<F>(factory);
     accept_empty_name::<F>(factory);
+    accept_max_length_name::<F>(factory);
     reject_nul_in_name::<F>(factory);
     reject_overlong_name::<F>(factory);
     reject_zero_stack::<F>(factory);
-    spawn_runs_entry_once::<F>(factory);
+    positive_stack_size_succeeds::<F>(factory);
+    spawn_runs_entry_exactly_once::<F>(factory);
     join_returns_after_task_exit::<F>(factory);
     repeated_join_returns_cached::<F>(factory);
     handle_is_nonzero::<F>(factory);
@@ -175,4 +203,5 @@ pub fn run_core_contracts<F: TaskFactory>(factory: &F) {
     current_from_main_is_none::<F>(factory);
     priority_is_preserved::<F>(factory);
     count_reflects_live_tasks::<F>(factory);
+    finished_task_not_in_count::<F>(factory);
 }

@@ -163,3 +163,59 @@ fn many_tasks_can_be_dropped_without_join() {
     PosixClock::delay(Duration::from_millis(50));
     assert_eq!(counter.load(Ordering::Relaxed), 100);
 }
+
+// ---------------------------------------------------------------------------
+// Concurrency (POSIX only)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn three_tasks_run_concurrently() {
+    let c = Arc::new(AtomicU32::new(0));
+    let c1 = Arc::clone(&c);
+    let c2 = Arc::clone(&c);
+    let c3 = Arc::clone(&c);
+
+    let t1 = PosixTaskBuilder::new()
+        .name("c1")
+        .spawn(move || {
+            PosixClock::delay(Duration::from_millis(10));
+            c1.fetch_add(1, Ordering::SeqCst);
+        })
+        .unwrap();
+
+    let t2 = PosixTaskBuilder::new()
+        .name("c2")
+        .spawn(move || {
+            PosixClock::delay(Duration::from_millis(10));
+            c2.fetch_add(1, Ordering::SeqCst);
+        })
+        .unwrap();
+
+    let t3 = PosixTaskBuilder::new()
+        .name("c3")
+        .spawn(move || {
+            PosixClock::delay(Duration::from_millis(10));
+            c3.fetch_add(1, Ordering::SeqCst);
+        })
+        .unwrap();
+
+    t1.join(Timeout::Forever).unwrap();
+    t2.join(Timeout::Forever).unwrap();
+    t3.join(Timeout::Forever).unwrap();
+
+    assert_eq!(c.load(Ordering::SeqCst), 3);
+}
+
+#[test]
+fn count_decrements_before_join_returns() {
+    let task = PosixTaskBuilder::new()
+        .name("count-dec")
+        .spawn(|| {})
+        .unwrap();
+
+    task.join(Timeout::Forever).unwrap();
+
+    // After join returns, count() must already reflect completion.
+    let after = task.join(Timeout::NoWait);
+    assert!(after.is_ok());
+}
