@@ -27,7 +27,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "1.85.0"
-      - run: cargo test --workspace --features testkit
+      - run: cargo test --workspace --features testkit -- --test-threads=1
 
   clippy:
     runs-on: ubuntu-latest
