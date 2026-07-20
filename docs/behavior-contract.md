@@ -94,9 +94,9 @@ All fallible operations return `Result<T, osal_api::Error>`.
 | `LockFailed` | Could not acquire lock | Mutex held by another context |
 | `NotFound` | Resource not found | Invalid handle or ID |
 | `Overflow` | Arithmetic overflow or count at max | capacity * msg_size overflow; semaphore at max_count |
-| `InvalidParameter` | Argument out of valid range | Zero-length name, count > max |
+| `InvalidParameter` | Argument out of valid range | Overlong name, NUL in name, zero stack, count > max |
 | `AlreadyInitialized` | Resource already created/started | Double `spawn()` on a Task |
-| `NotInitialized` | Resource not yet started | `join()` on unstarted Task |
+| `NotInitialized` | Resource not yet started | Future extension (not used by Task) |
 | `Unsupported` | Backend cannot perform operation | Mock Forever on full/empty queue |
 | `Internal(&'static str)` | Unexpected native error | errno, FreeRTOS status code |
 
@@ -854,11 +854,12 @@ govern how unsupported capabilities must be handled:
 | Capability | POSIX | Mock | Future FreeRTOS |
 |------------|-------|------|-----------------|
 | ISR operations | Not supported | Not supported | True ISR (extension trait) |
-| Task priority | Informational | Deterministic order | Hardware priority |
+| Task priority | Informational | Informational | Hardware priority |
+| Task current() | TLS-based | TLS-based | Backend-defined |
 | Stack watermark | Not tracked | Not tracked | Hardware tracked |
-| Scheduler start/stop | No-op | Controllable | Hardware scheduler |
+| Scheduler start/stop | No-op | Deferred | Hardware scheduler |
 | Critical section | Recursive mutex | Atomic counter | Interrupt disable |
-| Suspend/resume task | Not supported | Supported | Supported |
+| Suspend/resume task | Not supported | Deferred | Supported |
 
 ---
 
@@ -880,10 +881,8 @@ verification.
    value) is recorded in a history log. Tests assert on this log.
 4. **All operations non-blocking by default**: Blocking is simulated
    by time advancement. `Timeout::Forever` blocks until the
-   corresponding wake event occurs.
-5. **Deterministic task ordering**: Tasks run in priority order; at
-   equal priority, the first spawned runs first. Context switches
-   occur at explicit yield points.
+   corresponding wake event occurs. Task blocking and concurrency
+   are deferred to a future cooperative mock scheduler.
 
 ### Contract test integration
 
@@ -928,10 +927,10 @@ using pthread and related POSIX APIs.
    explicitly enabled.
 6. **Heap reporting**: `heap_free()` returns `usize::MAX` (host virtual
    memory).
-7. **Cooperative cancellation**: Task deletion requests cancellation;
-   tasks must periodically check and exit.
-8. **Thread registration**: A registry tracks all OSAL tasks for
-   introspection (`count()`, `current()`).
+7. **Task identity**: `current()` returns `Some(TaskHandle)` inside
+   an OSAL-created task via `thread_local!` TLS. `count()` returns
+   the number of tasks whose entry function has not yet completed.
+   A full task registry is deferred (see ADR 0013).
 
 ---
 

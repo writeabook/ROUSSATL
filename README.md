@@ -92,6 +92,7 @@ See [docs/architecture.md](docs/architecture.md) for details.
 - [ADR 0010: Timer Execution Model](docs/adr/0010-timer-execution-model.md)
 - [ADR 0011: System Critical Section Model](docs/adr/0011-system-critical-section-model.md)
 - [ADR 0012: CI Validation Gates](docs/adr/0012-ci-validation-gates.md)
+- [ADR 0013: Task Context and Live Count](docs/adr/0013-task-context-and-live-count.md)
 
 > The English behavior contract (`docs/behavior-contract.md`) is the
 > source of truth for backend conformance. Chinese translations are

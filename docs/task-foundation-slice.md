@@ -13,13 +13,15 @@ The Task foundation slice provides:
 - `spawn()` — create and start a task
 - `join(timeout)` — wait for task completion (NoWait, After, Forever)
 - Repeated join returns cached `ExitCode`
-- Opaque task `Handle`
+- Non-zero `TaskHandle` per task
 - `Task::priority()` query
-- `Task::current()` — handle of the calling task
-- `Task::count()` — number of known tasks
-- Mock backend (synchronous execution)
-- POSIX backend (pthread-based)
-- Shared smoke contract tests
+- `Task::current()` — returns `Option<TaskHandle>` (`Some` inside
+  OSAL task, `None` from main or non-OSAL thread)
+- `Task::count()` — number of OSAL tasks whose entry function has
+  not yet completed (live count, not handle count)
+- Mock backend (synchronous execution, per-thread TLS for `current()`)
+- POSIX backend (pthread-based, `thread_local!` TLS for `current()`)
+- 17 TaskCoreContract tests shared by both backends
 - Facade exposure through `osal::prelude::*`
 
 ## Non-goals

@@ -53,8 +53,8 @@ The foundation crate. Defines **what** OSAL can do, not **how**.
 
 - Public traits for all OS primitives (Mutex, Semaphore, Queue, Task,
   Timer, Clock, EventFlags, System)
-- Shared types: `Error`, `Timeout`, `Result<T>`, `Handle`, `Priority`,
-  `EventMask`, `StackSize`
+- Shared types: `Error`, `Timeout`, `Result<T>`, `Handle`, `TaskHandle`,
+  `Priority`, `EventMask`, `StackSize`
 - Zero runtime dependencies
 - `no_std` compatible by default; optional `std` feature
 

@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-07-07)
+Accepted (2026-07-20)
 
 ## Context
 
@@ -46,10 +46,10 @@ synchronous execution model.
    store raw values without clamping. Zero stack size and over-long
    names are rejected explicitly.
 
-4. **Backend-local TLS**: POSIX uses `thread_local! { Cell<Option<TaskHandle>> }`
-   guarded by a `CurrentTaskGuard` set in the trampoline. Mock uses
-   the same pattern so that synchronous entry execution sees the
-   correct handle.
+4. **Backend-local TLS**: Both POSIX and Mock use `std::thread_local!
+   { Cell<Option<TaskHandle>> }` guarded by a `CurrentGuard` set
+   before entry execution, so `current()` returns the correct handle
+   from within any OSAL task context.
 
 5. **Mock does not claim concurrency**: Mock passes `TaskCoreContract`
    only. Concurrency/timeout tests are POSIX-only. The documentation

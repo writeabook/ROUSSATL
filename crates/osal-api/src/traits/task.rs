@@ -108,14 +108,17 @@ pub trait TaskBuilder: Sized {
 
     /// Set the task name (informational, for debugging).
     ///
-    /// Truncated to 31 bytes by the backend; must not contain embedded
-    /// NUL bytes.
+    /// Up to 31 UTF-8 bytes. Names exceeding 31 bytes are rejected at
+    /// `spawn()` with `Error::InvalidParameter`. Embedded NUL bytes
+    /// are also rejected. Empty names are valid.
     fn name(self, name: &str) -> Self;
 
-    /// Set the stack size in bytes.
+    /// Request a minimum stack size in bytes.
     ///
-    /// The backend enforces a minimum stack size; values below the
-    /// minimum are clamped.
+    /// `0` is invalid and returns `Error::InvalidParameter` at
+    /// `spawn()`. Positive values represent a requested minimum; the
+    /// backend may round up to satisfy platform minimum and alignment
+    /// requirements.
     fn stack_size(self, bytes: usize) -> Self;
 
     /// Set the task priority. Higher values = higher priority.
