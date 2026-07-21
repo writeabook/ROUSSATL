@@ -17,14 +17,17 @@ re-initialise.
 ### Lease exclusion for internal services
 
 Timer Service, its worker thread, and its control block do **not**
-hold `RuntimeLease`s.  Only user-visible OSAL objects (`PosixTimer`
-handles) contribute to `active_objects()`.  Without this distinction,
-the runtime would always see a non-zero count and shutdown would
-never succeed.
+hold `RuntimeLease`s.  During P6B-4, timer-service-local entry
+liveness (the `timers` registry) prevents backend shutdown while
+`Timer` handles remain alive.
+
+`PosixTimer` handles will hold `RuntimeLease`s once facade runtime
+integration is introduced (ADR 0015).  Until then, shutdown
+protection is enforced at the timer-service level.
 
 | Component | Holds RuntimeLease? |
 |-----------|---------------------|
-| `PosixTimer` handle | ✅ yes |
+| `PosixTimer` handle | ❌ no (will hold in facade phase) |
 | `TimerService` worker | ❌ no |
 | `TimerServiceControl` block | ❌ no |
 

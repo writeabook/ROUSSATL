@@ -104,9 +104,10 @@ impl TimerService {
             }
 
             match earliest {
-                None => {
-                    let _ = self.condvar.wait(&mut guard);
-                }
+                None => match self.condvar.wait(&mut guard) {
+                    Ok(()) => {}
+                    Err(e) => panic!("timer worker condvar wait failed: {e:?}"),
+                },
                 Some(deadline) if deadline <= now => {
                     drop(guard);
                     self.dispatch_one();
@@ -114,7 +115,10 @@ impl TimerService {
                 Some(deadline) => {
                     let timeout = deadline.saturating_sub(now);
                     let abs = time::abs_deadline(timeout);
-                    let _ = self.condvar.timed_wait(&mut guard, &abs);
+                    match self.condvar.timed_wait(&mut guard, &abs) {
+                        Ok(()) | Err(Error::Timeout) => {}
+                        Err(e) => panic!("timer worker timed wait failed: {e:?}"),
+                    }
                 }
             }
         }
@@ -271,24 +275,32 @@ pub fn shutdown() -> Result<()> {
         .try_join()
         .expect("timer worker join invariant violated");
 
-    // Phase 3: transition to Stopped, verifying generation.
-    timer_control::with_control(|ctrl| match &ctrl.slot {
-        ServiceSlot::Stopping {
-            generation: current_g,
-        } if *current_g == shut_gen => {
-            ctrl.slot = ServiceSlot::Stopped;
-            Ok(())
+    // Phase 3: worker has been joined — this is irreversible.
+    // Any failure here is an internal invariant violation, not a
+    // recoverable error.  We must NOT return Err and allow the
+    // facade to roll back to Running with a dead worker.
+    timer_control::with_control(|ctrl| {
+        match &ctrl.slot {
+            ServiceSlot::Stopping {
+                generation: current_g,
+            } if *current_g == shut_gen => {
+                ctrl.slot = ServiceSlot::Stopped;
+                Ok(())
+            }
+            _ => panic!("timer shutdown generation invariant violated"),
         }
-        _ => Err(Error::Internal("timer slot generation mismatch")),
     })
+    .expect("timer control unavailable after worker shutdown");
+
+    Ok(())
 }
 
 #[allow(dead_code)]
-pub fn is_running() -> bool {
+fn is_running() -> bool {
     timer_control::with_control(|ctrl| {
         Ok(matches!(ctrl.slot, ServiceSlot::Running { .. }))
     })
-    .unwrap_or(false)
+    .expect("timer control unavailable during state query")
 }
 
 // ---------------------------------------------------------------------------
@@ -301,15 +313,17 @@ pub fn register(
     callback: TimerCallback,
 ) -> Result<u64> {
     with_service(|svc, state| {
+        // Validate parameters before consuming any resources.
+        let timer_state = TimerState::new(period, mode).map_err(|_| Error::InvalidParameter)?;
+
         let id = state.next_id;
-        state.next_id = state
-            .next_id
-            .checked_add(1)
-            .ok_or(Error::Overflow)?;
+        let next_id = id.checked_add(1).ok_or(Error::Overflow)?;
+        state.next_id = next_id;
         debug_assert_ne!(id, 0, "timer ID 0 is reserved");
+
         state.timers.push(TimerEntry {
             id,
-            state: TimerState::new(period, mode).map_err(|_| Error::InvalidParameter)?,
+            state: timer_state,
             callback: Some(callback),
             deleted: false,
         });
