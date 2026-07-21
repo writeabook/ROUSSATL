@@ -31,6 +31,7 @@ pub(crate) enum ServiceSlot {
         worker: super::sys::task::PosixThread,
         generation: u64,
     },
+    #[allow(dead_code)]
     Stopping {
         generation: u64,
     },

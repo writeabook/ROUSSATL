@@ -21,4 +21,4 @@ pub mod system;
 pub mod task;
 pub mod timer;
 pub(crate) mod timer_control;
-pub(crate) mod timer_service;
+pub mod timer_service;
