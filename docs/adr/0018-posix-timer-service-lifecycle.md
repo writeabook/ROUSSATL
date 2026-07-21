@@ -14,6 +14,20 @@ re-initialise.
 
 ## Decision
 
+### Lease exclusion for internal services
+
+Timer Service, its worker thread, and its control block do **not**
+hold `RuntimeLease`s.  Only user-visible OSAL objects (`PosixTimer`
+handles) contribute to `active_objects()`.  Without this distinction,
+the runtime would always see a non-zero count and shutdown would
+never succeed.
+
+| Component | Holds RuntimeLease? |
+|-----------|---------------------|
+| `PosixTimer` handle | ✅ yes |
+| `TimerService` worker | ❌ no |
+| `TimerServiceControl` block | ❌ no |
+
 ### Worker thread
 
 - The worker thread is **joinable** (not detached).
@@ -21,13 +35,24 @@ re-initialise.
   via `Arc::into_raw` + `Arc::from_raw`.
 - On shutdown, `stop_requested` is set, the condvar is broadcast, the
   worker exits, and `pthread_join` is called.
-- The worker must not call `shutdown()` on itself (self-join).
+- The worker must not call `shutdown()` on itself (self-join detected
+  via `pthread_equal` and returns `Error::Busy`).
+
+### pthread_once for control block only
+
+`pthread_once` may be used **only** for the permanent control block
+(`TimerServiceControl` mutex + slot).  The service instance (timers,
+worker thread) must be explicitly created and destroyed.  The control
+block is process-lifetime; the service instance is runtime-lifetime.
 
 ### Control block vs. service instance
 
-A process-lifetime `PosixInitCell<TimerServiceControl>` holds a
-permanent mutex and slot.  The slot is `Stopped`, `Running { service,
-worker }`, or `Stopping`.
+A process-lifetime control block holds a permanent mutex and slot.
+The slot has three states:
+
+- `Stopped` — no service instance
+- `Running { service: Arc<TimerService>, worker: PosixThread, generation: u64 }` — active
+- `Stopping { generation: u64 }` — shutdown in progress
 
 The actual `TimerService` (timers, condvar, state) is created on
 `initialize()` and destroyed on `shutdown()`.  The control block
@@ -44,10 +69,22 @@ callback:        holds neither lock
 
 `service → control` is forbidden.
 
-### Callback execution
+### Shutdown flow
 
-Callbacks execute outside the service mutex.  Callbacks must not
-panic or unwind (`panic = "abort"` is the workspace default).
+```
+control mutex
+→ confirm Running
+→ confirm not self-shutdown (pthread_equal)
+→ service mutex
+→ check no active timers (else Busy)
+→ stop_requested = true
+→ condvar.broadcast()
+→ release service mutex
+→ slot = Stopping
+→ release control mutex
+→ pthread_join worker
+→ slot = Stopped
+```
 
 ### Shutdown / re-initialise
 
@@ -68,11 +105,20 @@ ignoring errors.  `PosixTimer` propagates these to the caller.
 `Deregister` on drop uses `debug_assert!` (drop cannot return an
 error).
 
-### No `catch_unwind`
+| Error | Cause |
+|-------|-------|
+| `NotInitialized` | Service is `Stopped` |
+| `Busy` | Service is `Stopping` |
+| `NotFound` | Timer ID not found |
+| `Overflow` | ID counter exhausted |
+| `InvalidParameter` | Invalid period or argument |
+| `Internal` | pthread failure |
 
-The callback panic strategy follows the platform panic policy
-(`abort`).  No `catch_unwind` is used — it requires `std` and is
-not meaningful in a `no_std` backend.
+### Callback execution
+
+Callbacks execute outside the service mutex.  Callbacks must not
+panic or unwind (`panic = "abort"` is the workspace default).  No
+`catch_unwind` is used.
 
 ## Consequences
 
