@@ -65,24 +65,29 @@ use crate::sys::tls::{CurrentGuard as PthreadTlsGuard, TaskTlsSlot};
 
 static TASK_TLS: TaskTlsSlot = TaskTlsSlot::new();
 
+/// RAII guard that installs the current task identity into the
+/// per-thread pthread TLS slot and clears it on drop.
+///
+/// Holds an `Arc<PosixTaskInner>` so the pointee remains alive as
+/// long as the TLS slot points to it.
 struct CurrentGuard {
-    _inner: Option<PthreadTlsGuard>,
+    _tls: PthreadTlsGuard,
+    _inner: Arc<PosixTaskInner>,
 }
 
 impl CurrentGuard {
-    fn enter(handle: TaskHandle) -> Self {
-        match TASK_TLS.get_or_init() {
-            Ok(key) => {
-                let value = &handle as *const TaskHandle as *mut c_void;
-                match PthreadTlsGuard::enter(key, value) {
-                    Ok(guard) => Self {
-                        _inner: Some(guard),
-                    },
-                    Err(_) => Self { _inner: None },
-                }
-            }
-            Err(_) => Self { _inner: None },
-        }
+    /// Install `inner` as the current task identity.
+    ///
+    /// The `Arc` pointer is stored in pthread TLS.  The guard keeps
+    /// the `Arc` alive; `Drop` clears the TLS before releasing it.
+    fn enter(inner: Arc<PosixTaskInner>) -> Result<Self> {
+        let key = TASK_TLS.get_or_init()?;
+        let value = Arc::as_ptr(&inner).cast_mut().cast::<c_void>();
+        let tls = PthreadTlsGuard::enter(key, value)?;
+        Ok(Self {
+            _tls: tls,
+            _inner: inner,
+        })
     }
 }
 
@@ -136,6 +141,16 @@ enum JoinState {
 }
 
 // ---------------------------------------------------------------------------
+// Startup handshake
+// ---------------------------------------------------------------------------
+
+enum StartupState {
+    Pending,
+    Ready,
+    Failed(Error),
+}
+
+// ---------------------------------------------------------------------------
 // Inner state
 // ---------------------------------------------------------------------------
 
@@ -145,7 +160,8 @@ struct PosixTaskInner {
     thread: UnsafeCell<Option<PosixThread>>,
     mutex: PosixMutex,
     condvar: PosixCondvar,
-    state: UnsafeCell<JoinState>,
+    join_state: UnsafeCell<JoinState>,
+    startup: UnsafeCell<StartupState>,
 }
 
 // Safety: all state access is guarded by the mutex.
@@ -159,7 +175,7 @@ impl PosixTaskInner {
         f: impl FnOnce(&mut JoinState) -> R,
     ) -> R {
         // Safety: the caller holds self.mutex.
-        unsafe { f(&mut *self.state.get()) }
+        unsafe { f(&mut *self.join_state.get()) }
     }
 
     fn set_finished(&self, code: ExitCode) {
@@ -167,6 +183,30 @@ impl PosixTaskInner {
         self.with_state_locked(&guard, |state| {
             *state = JoinState::Finished(code);
         });
+    }
+
+    fn publish_startup(&self, result: Result<()>) {
+        let _guard = self.mutex.lock_guard().unwrap();
+        let startup = unsafe { &mut *self.startup.get() };
+        *startup = match result {
+            Ok(()) => StartupState::Ready,
+            Err(e) => StartupState::Failed(e),
+        };
+        let _ = self.condvar.broadcast();
+    }
+
+    fn wait_startup(inner: &Arc<PosixTaskInner>) -> Result<()> {
+        let mut guard = inner.mutex.lock_guard().unwrap();
+        loop {
+            let startup = unsafe { &*inner.startup.get() };
+            match startup {
+                StartupState::Pending => {
+                    inner.condvar.wait(&mut guard).unwrap();
+                }
+                StartupState::Ready => return Ok(()),
+                StartupState::Failed(e) => return Err(e.clone()),
+            }
+        }
     }
 }
 
@@ -177,10 +217,9 @@ impl Drop for PosixTaskInner {
         // a joinable pthread resource leak.
         // Note: LIVE_COUNT is NOT decremented here — that is handled
         // by LiveTaskToken in the trampoline.
+        // PosixThread::Drop will detach if needed.
         unsafe {
-            if let Some(thread) = (*self.thread.get()).take() {
-                let _ = thread.detach();
-            }
+            drop((*self.thread.get()).take());
         }
     }
 }
@@ -199,8 +238,19 @@ struct TaskStart {
 extern "C" fn task_trampoline(arg: *mut c_void) -> *mut c_void {
     let mut start: Box<TaskStart> = unsafe { Box::from_raw(arg.cast()) };
 
-    // Set TLS context so current() works inside the entry.
-    let _context = CurrentGuard::enter(start.inner.handle);
+    // Install TLS context.  If this fails, report the error via the
+    // startup handshake and exit without executing the entry.
+    let _context = match CurrentGuard::enter(Arc::clone(&start.inner)) {
+        Ok(guard) => {
+            start.inner.publish_startup(Ok(()));
+            guard
+        }
+        Err(e) => {
+            start.inner.publish_startup(Err(e));
+            start.live_token.take();
+            return core::ptr::null_mut();
+        }
+    };
 
     if let Some(entry) = start.entry.take() {
         entry();
@@ -317,9 +367,9 @@ impl PosixTask {
     /// can retry.
     fn do_pthread_join(&self) -> Result<ExitCode> {
         let join_result = {
-            let thread = unsafe { &*self.inner.thread.get() };
-            match thread.as_ref() {
-                Some(t) => t.join(),
+            let thread = unsafe { &mut *self.inner.thread.get() };
+            match thread.as_mut() {
+                Some(t) => t.try_join(),
                 None => Ok(()),
             }
         };
@@ -383,9 +433,13 @@ impl Task for PosixTask {
         if ptr.is_null() {
             return None;
         }
-        // Safety: the pointer was set by CurrentGuard::enter, which
-        // stored a reference to a TaskHandle inside the Arc'd inner.
-        Some(unsafe { *(ptr as *const TaskHandle) })
+        // Safety: ptr was set by CurrentGuard::enter, which stores
+        // Arc::as_ptr(&PosixTaskInner).  CurrentGuard holds the Arc,
+        // so the pointee is alive as long as the guard is alive.
+        // The guard is held in the trampoline's stack, so it is alive
+        // for the duration of entry execution.
+        let inner = unsafe { &*ptr.cast::<PosixTaskInner>() };
+        Some(inner.handle)
     }
 
     fn count() -> usize {
@@ -437,6 +491,10 @@ impl TaskBuilder for PosixTaskBuilder {
     {
         validation::validate_task_config(&self.name, self.stack_size)?;
 
+        // Pre-initialise the TLS key on the parent thread so the
+        // child only needs to call pthread_setspecific.
+        let _tls_key = TASK_TLS.get_or_init()?;
+
         // All fallible resources first.
         let mutex = PosixMutex::new()?;
         let condvar = PosixCondvar::new()?;
@@ -448,7 +506,8 @@ impl TaskBuilder for PosixTaskBuilder {
             thread: UnsafeCell::new(None),
             mutex,
             condvar,
-            state: UnsafeCell::new(JoinState::Running),
+            join_state: UnsafeCell::new(JoinState::Running),
+            startup: UnsafeCell::new(StartupState::Pending),
         });
 
         let start = Box::new(TaskStart {
@@ -479,7 +538,20 @@ impl TaskBuilder for PosixTaskBuilder {
             *inner.thread.get() = Some(thread);
         }
 
-        Ok(PosixTask { inner })
+        // Wait for the child to install TLS and publish Ready.
+        // If the child reports a startup failure, join it and
+        // return the error.
+        match PosixTaskInner::wait_startup(&inner) {
+            Ok(()) => Ok(PosixTask { inner }),
+            Err(e) => {
+                // Join the failed child thread.
+                let thread = unsafe { &mut *inner.thread.get() };
+                if let Some(mut t) = thread.take() {
+                    let _ = t.try_join();
+                }
+                Err(e)
+            }
+        }
     }
 }
 

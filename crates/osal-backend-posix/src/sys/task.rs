@@ -25,8 +25,11 @@ pub struct PosixThreadConfig {
 }
 
 /// An OS thread created via `pthread_create`.
+///
+/// On drop, if the handle has not been joined or explicitly consumed,
+/// the thread is detached so the OS can reclaim resources.
 pub struct PosixThread {
-    tid: libc::pthread_t,
+    thread: Option<libc::pthread_t>,
 }
 
 impl PosixThread {
@@ -36,7 +39,6 @@ impl PosixThread {
         entry: RawTaskEntry,
         arg: *mut c_void,
     ) -> Result<Self> {
-        // Normalize stack size to platform minimum.
         let stack = if config.stack_size < libc::PTHREAD_STACK_MIN {
             libc::PTHREAD_STACK_MIN
         } else {
@@ -66,40 +68,33 @@ impl PosixThread {
             }
 
             Ok(Self {
-                tid: tid.assume_init(),
+                thread: Some(tid.assume_init()),
             })
         }
     }
 
-    /// Join the thread (non-consuming — call once only).
+    /// Join the thread, consuming the handle on success.
     ///
-    /// Must be called at most once — `pthread_join` is not repeatable.
-    /// The higher-level [`crate::task::PosixTask`] guards this with a
-    /// completion-state machine. The caller is responsible for dropping
-    /// or detaching this handle separately.
-    pub fn join(&self) -> Result<()> {
-        let raw = self.tid;
-        let rc = unsafe { libc::pthread_join(raw, core::ptr::null_mut()) };
+    /// On failure the handle is preserved so the caller can retry.
+    pub fn try_join(&mut self) -> Result<()> {
+        let tid = self.thread.ok_or(Error::Internal("already joined"))?;
+        let rc = unsafe { libc::pthread_join(tid, core::ptr::null_mut()) };
 
-        if rc == 0 {
-            Ok(())
-        } else {
-            Err(Error::Internal("pthread_join failed"))
+        if rc != 0 {
+            return Err(Error::Internal("pthread_join failed"));
         }
+
+        self.thread = None;
+        Ok(())
     }
+}
 
-    /// Detach the thread, consuming this handle.
-    ///
-    /// After detach, the thread's resources are automatically reclaimed
-    /// when it exits — no `join` is needed. Use this when dropping a
-    /// `Task` handle without having joined first.
-    pub fn detach(self) -> Result<()> {
-        let rc = unsafe { libc::pthread_detach(self.tid) };
-
-        if rc == 0 {
-            Ok(())
-        } else {
-            Err(Error::Internal("pthread_detach failed"))
+impl Drop for PosixThread {
+    fn drop(&mut self) {
+        if let Some(tid) = self.thread.take() {
+            unsafe {
+                libc::pthread_detach(tid);
+            }
         }
     }
 }
