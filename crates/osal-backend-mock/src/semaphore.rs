@@ -19,8 +19,19 @@ use core::cell::RefCell;
 use osal_api::error::{Error, Result};
 use osal_api::time::Timeout;
 use osal_api::traits::semaphore::{BinarySemaphore, CountingSemaphore};
+use osal_shared::runtime::RuntimeLease;
 
 use osal_portable::counting_semaphore::CountingSemaphoreState;
+
+// ---------------------------------------------------------------------------
+// Inner state
+// ---------------------------------------------------------------------------
+
+struct MockSemaphoreInner {
+    state: RefCell<CountingSemaphoreState>,
+    /// Held for the lifetime of the semaphore (ADR 0019 §6).
+    _runtime: RuntimeLease<'static>,
+}
 
 // ---------------------------------------------------------------------------
 // MockCountingSemaphore
@@ -29,16 +40,20 @@ use osal_portable::counting_semaphore::CountingSemaphoreState;
 /// A mock counting semaphore for contract testing.
 #[derive(Clone)]
 pub struct MockCountingSemaphore {
-    inner: Rc<RefCell<CountingSemaphoreState>>,
+    inner: Rc<MockSemaphoreInner>,
 }
 
 impl MockCountingSemaphore {
     pub fn new(max_count: u32, initial_count: u32) -> Result<Self> {
+        let runtime = crate::runtime::acquire_object()?;
         Ok(Self {
-            inner: Rc::new(RefCell::new(CountingSemaphoreState::new(
-                max_count,
-                initial_count,
-            )?)),
+            inner: Rc::new(MockSemaphoreInner {
+                state: RefCell::new(CountingSemaphoreState::new(
+                    max_count,
+                    initial_count,
+                )?),
+                _runtime: runtime,
+            }),
         })
     }
 }
@@ -49,7 +64,7 @@ impl CountingSemaphore for MockCountingSemaphore {
     }
 
     fn acquire(&self, timeout: Timeout) -> Result<()> {
-        if self.inner.borrow_mut().try_acquire() {
+        if self.inner.state.borrow_mut().try_acquire() {
             return Ok(());
         }
         // count == 0 — cannot satisfy in single-context model
@@ -61,15 +76,15 @@ impl CountingSemaphore for MockCountingSemaphore {
     }
 
     fn release(&self) -> Result<()> {
-        self.inner.borrow_mut().release()
+        self.inner.state.borrow_mut().release()
     }
 
     fn max_count(&self) -> u32 {
-        self.inner.borrow().max_count()
+        self.inner.state.borrow().max_count()
     }
 
     fn count(&self) -> Result<u32> {
-        Ok(self.inner.borrow().count())
+        Ok(self.inner.state.borrow().count())
     }
 }
 

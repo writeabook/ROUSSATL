@@ -11,6 +11,7 @@ use core::time::Duration;
 use osal_api::error::{Error, Result};
 use osal_api::time::Timeout;
 use osal_api::traits::semaphore::{BinarySemaphore, CountingSemaphore};
+use osal_shared::runtime::RuntimeLease;
 
 use osal_portable::counting_semaphore::CountingSemaphoreState;
 
@@ -27,6 +28,8 @@ struct PosixCountingSemaphoreInner {
     state: UnsafeCell<CountingSemaphoreState>,
     /// Cached at construction — immutable, no lock needed.
     max_count: u32,
+    /// Held for the lifetime of the semaphore (ADR 0019 §6).
+    _runtime: RuntimeLease<'static>,
 }
 
 // Safety: the mutex ensures exclusive access to state.
@@ -45,12 +48,16 @@ pub struct PosixCountingSemaphore {
 
 impl PosixCountingSemaphore {
     pub fn new(max_count: u32, initial_count: u32) -> Result<Self> {
+        // Validate parameters (CountingSemaphoreState::new handles this),
+        // then acquire a runtime lease before creating native resources.
+        let runtime = crate::runtime::acquire_object()?;
         Ok(Self {
             inner: Arc::new(PosixCountingSemaphoreInner {
                 mutex: PosixMutex::new()?,
                 condvar: PosixCondvar::new()?,
                 state: UnsafeCell::new(CountingSemaphoreState::new(max_count, initial_count)?),
                 max_count,
+                _runtime: runtime,
             }),
         })
     }
