@@ -9,6 +9,8 @@
 use osal::prelude::*;
 
 fn main() -> Result<()> {
+    osal::initialize()?;
+
     // Counting semaphore: resource pool of 2
     let pool = CountingSemaphore::new(2, 1)?;
     println!("Initial count: {}", pool.count()?);
@@ -30,6 +32,9 @@ fn main() -> Result<()> {
     ready.acquire(Timeout::NoWait)?;
     assert!(!ready.is_signaled()?);
 
+    drop(pool);
+    drop(ready);
+    osal::shutdown()?;
     println!("Semaphore example complete.");
     Ok(())
 }

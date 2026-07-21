@@ -58,6 +58,9 @@ pub mod backend;
 /// Runtime lifecycle API — explicit init and shutdown.
 pub mod runtime;
 
+// Re-export at crate root so users can call osal::initialize() etc.
+pub use runtime::{initialize, runtime_state, shutdown};
+
 /// Commonly used types, re-exported for convenience.
 ///
 /// ```ignore

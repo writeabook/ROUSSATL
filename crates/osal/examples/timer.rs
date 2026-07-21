@@ -14,6 +14,8 @@ use std::sync::Arc;
 use osal::prelude::*;
 
 fn main() -> Result<()> {
+    osal::initialize()?;
+
     let fired = Arc::new(AtomicU32::new(0));
     let f = Arc::clone(&fired);
 
@@ -33,5 +35,7 @@ fn main() -> Result<()> {
     println!("Timer fired exactly once.");
 
     timer.stop()?;
+    drop(timer);
+    osal::shutdown()?;
     Ok(())
 }

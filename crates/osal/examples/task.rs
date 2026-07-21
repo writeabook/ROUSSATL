@@ -10,6 +10,8 @@
 use osal::prelude::*;
 
 fn main() -> Result<()> {
+    osal::initialize()?;
+
     let task = TaskBuilder::new().name("worker").priority(1).spawn(|| {
         // worker body
     })?;
@@ -18,5 +20,7 @@ fn main() -> Result<()> {
     assert_eq!(exit, ExitCode::SUCCESS);
     println!("Task exited with code: {}", exit.code());
 
+    drop(task);
+    osal::shutdown()?;
     Ok(())
 }

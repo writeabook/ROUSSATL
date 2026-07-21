@@ -9,6 +9,8 @@
 use osal::prelude::*;
 
 fn main() -> Result<()> {
+    osal::initialize()?;
+
     let q = Queue::new(4, 4)?;
 
     q.send(&1u32.to_le_bytes(), Timeout::NoWait)?;
@@ -19,5 +21,8 @@ fn main() -> Result<()> {
     let value = u32::from_le_bytes(buf);
     assert_eq!(value, 1);
     println!("Queue roundtrip OK: {value}");
+
+    drop(q);
+    osal::shutdown()?;
     Ok(())
 }

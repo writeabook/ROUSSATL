@@ -9,6 +9,8 @@
 use osal::prelude::*;
 
 fn main() -> Result<()> {
+    osal::initialize()?;
+
     let counter = Mutex::new(0u32)?;
 
     // Lock, mutate, release via guard drop.
@@ -25,6 +27,10 @@ fn main() -> Result<()> {
         assert_eq!(*guard, 1);
     }
 
+    drop(c2);
+    drop(counter);
+
+    osal::shutdown()?;
     println!("Mutex example complete.");
     Ok(())
 }
