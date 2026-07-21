@@ -5,7 +5,7 @@ use osal_api::runtime::RuntimeState;
 
 /// Factory for backend runtime lifecycle.
 ///
-/// Each backend owns its own [`RuntimeLifecycle`] instance (ADR 0019).
+/// Each backend owns its own `RuntimeLifecycle` instance (ADR 0019).
 /// Implementations delegate to the backend-local `static RUNTIME`.
 ///
 /// Methods are associated functions (no `&self`) because the runtime is

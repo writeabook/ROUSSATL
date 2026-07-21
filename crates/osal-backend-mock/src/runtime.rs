@@ -41,7 +41,8 @@ static RUNTIME: RuntimeLifecycle = RuntimeLifecycle::new();
 ///
 /// Resets the virtual clock to zero and clears transient state
 /// (fault injection triggers).  Idempotent: returns
-/// [`Error::AlreadyInitialized`] if already [`Running`](RuntimeState::Running).
+/// [`Error::AlreadyInitialized`](osal_api::error::Error::AlreadyInitialized)
+/// if already [`Running`](RuntimeState::Running).
 pub fn initialize() -> Result<()> {
     let transition = RUNTIME.begin_initialize()?;
 
@@ -59,7 +60,9 @@ pub fn initialize() -> Result<()> {
 /// Shut down all mock backend services.
 ///
 /// Detaches all timers (via epoch bump) and resets the clock.
-/// Returns [`Error::Busy`] while any [`RuntimeLease`] is alive.
+/// Returns
+/// [`Error::Busy`](osal_api::error::Error::Busy)
+/// while any [`RuntimeLease`] is alive.
 pub fn shutdown() -> Result<()> {
     let transition = RUNTIME.begin_shutdown()?;
 

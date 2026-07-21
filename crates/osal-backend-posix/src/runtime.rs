@@ -2,7 +2,7 @@
 //!
 //! Owns a backend-local [`RuntimeLifecycle`] (ADR 0019) and orchestrates
 //! backend service startup / shutdown.  Currently the only managed
-//! backend service is [`crate::timer_service`]; future services (event
+//! backend service is `crate::timer_service`; future services (event
 //! loop, IO) will also be started and stopped here.
 //!
 //! # Initialization order
@@ -44,9 +44,12 @@ static RUNTIME: RuntimeLifecycle = RuntimeLifecycle::new();
 
 /// Initialise all backend services.
 ///
-/// Idempotent: returns [`Error::AlreadyInitialized`] if the runtime is
-/// already [`Running`](RuntimeState::Running).  On failure the runtime
-/// auto-rolls back to [`Uninitialized`](RuntimeState::Uninitialized).
+/// Idempotent: returns
+/// [`Error::AlreadyInitialized`](osal_api::error::Error::AlreadyInitialized)
+/// if the runtime is already
+/// [`Running`](RuntimeState::Running).  On failure the runtime
+/// auto-rolls back to
+/// [`Uninitialized`](RuntimeState::Uninitialized).
 pub fn initialize() -> Result<()> {
     let transition = RUNTIME.begin_initialize()?;
 
@@ -61,8 +64,12 @@ pub fn initialize() -> Result<()> {
 
 /// Shut down all backend services.
 ///
-/// Returns [`Error::Busy`] while any [`RuntimeLease`] is still alive.
-/// Returns [`Error::NotInitialized`] if the runtime is not
+/// Returns
+/// [`Error::Busy`](osal_api::error::Error::Busy)
+/// while any [`RuntimeLease`] is still alive.
+/// Returns
+/// [`Error::NotInitialized`](osal_api::error::Error::NotInitialized)
+/// if the runtime is not
 /// [`Running`](RuntimeState::Running).  On failure the runtime
 /// auto-rolls back to Running.
 pub fn shutdown() -> Result<()> {
