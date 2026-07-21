@@ -21,6 +21,7 @@ use osal_api::error::{Error, Result};
 use osal_api::time::Timeout;
 use osal_api::traits::task::{Task, TaskBuilder};
 use osal_api::types::{ExitCode, Priority, TaskHandle};
+use osal_shared::runtime::RuntimeLease;
 
 use osal_shared::validation;
 
@@ -99,6 +100,8 @@ struct MockTaskInner {
     handle: TaskHandle,
     priority: Priority,
     exit_code: ExitCode,
+    /// Held for the lifetime of the Task handle (ADR 0019 §4, §6).
+    _runtime: RuntimeLease<'static>,
 }
 
 // ---------------------------------------------------------------------------
@@ -179,7 +182,11 @@ impl TaskBuilder for MockTaskBuilder {
     where
         F: FnOnce() + Send + 'static,
     {
+        // 1. Validate parameters first.
         validation::validate_task_config(&self.name, self.stack_size)?;
+
+        // 2. Acquire a runtime lease.
+        let runtime = crate::runtime::acquire_object()?;
 
         let handle = allocate_task_handle()?;
 
@@ -187,6 +194,7 @@ impl TaskBuilder for MockTaskBuilder {
             handle,
             priority: self.priority,
             exit_code: ExitCode::SUCCESS,
+            _runtime: runtime,
         });
 
         // Execute synchronously with correct TLS context and live count.

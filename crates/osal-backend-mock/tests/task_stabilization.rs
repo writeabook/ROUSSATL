@@ -4,6 +4,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use std::panic::catch_unwind;
 
 use osal_api::traits::task::{Task as _, TaskBuilder as _};
+use osal_backend_mock::runtime;
 use osal_backend_mock::task::{MockTask, MockTaskBuilder};
 
 // Simple spinlock — serialises count-dependent tests to avoid
@@ -27,6 +28,7 @@ impl Drop for CountLock {
 #[test]
 fn panic_rollback_current_returns_none() {
     let _lock = acquire();
+    let _ = runtime::initialize();
 
     let result = catch_unwind(|| {
         let _ = MockTaskBuilder::new()
@@ -42,6 +44,7 @@ fn panic_rollback_current_returns_none() {
 #[test]
 fn panic_rollback_count_unchanged() {
     let _lock = acquire();
+    let _ = runtime::initialize();
 
     let baseline = MockTask::count();
 

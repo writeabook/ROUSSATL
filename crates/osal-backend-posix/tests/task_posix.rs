@@ -11,6 +11,7 @@ use osal_api::traits::task::{Task as _, TaskBuilder as _};
 use osal_api::types::ExitCode;
 
 use osal_backend_posix::clock::PosixClock;
+use osal_backend_posix::runtime;
 use osal_backend_posix::task::{PosixTask, PosixTaskBuilder};
 
 // ---------------------------------------------------------------------------
@@ -40,6 +41,7 @@ impl Drop for CountTestLock {
 
 #[test]
 fn join_after_times_out_then_can_retry() {
+    let _ = runtime::initialize();
     static DONE: AtomicBool = AtomicBool::new(false);
     DONE.store(false, Ordering::SeqCst);
 
@@ -64,6 +66,7 @@ fn join_after_times_out_then_can_retry() {
 
 #[test]
 fn join_no_wait_times_out_while_running() {
+    let _ = runtime::initialize();
     static RUNNING: AtomicBool = AtomicBool::new(false);
     RUNNING.store(false, Ordering::SeqCst);
 
@@ -87,6 +90,7 @@ fn join_no_wait_times_out_while_running() {
 
 #[test]
 fn join_forever_returns_after_completion() {
+    let _ = runtime::initialize();
     let task = PosixTaskBuilder::new()
         .name("forever")
         .spawn(|| {})
@@ -102,6 +106,7 @@ fn join_forever_returns_after_completion() {
 
 #[test]
 fn repeated_join_returns_cached_exit_code() {
+    let _ = runtime::initialize();
     let task = PosixTaskBuilder::new().name("repeat").spawn(|| {}).unwrap();
 
     let r1 = task.join(Timeout::Forever).unwrap();
@@ -120,6 +125,7 @@ fn repeated_join_returns_cached_exit_code() {
 
 #[test]
 fn priority_is_preserved() {
+    let _ = runtime::initialize();
     let task = PosixTaskBuilder::new()
         .name("prio")
         .priority(7)
@@ -133,6 +139,7 @@ fn priority_is_preserved() {
 
 #[test]
 fn handle_is_nonzero() {
+    let _ = runtime::initialize();
     let task = PosixTaskBuilder::new().name("handle").spawn(|| {}).unwrap();
 
     assert_ne!(task.handle().get(), 0);
@@ -141,6 +148,7 @@ fn handle_is_nonzero() {
 
 #[test]
 fn invalid_name_rejected() {
+    let _ = runtime::initialize();
     let result = PosixTaskBuilder::new().name("bad\0name").spawn(|| {});
     assert!(matches!(result, Err(Error::InvalidParameter)));
 }
@@ -151,6 +159,7 @@ fn invalid_name_rejected() {
 
 #[test]
 fn drop_without_join_does_not_cancel_task() {
+    let _ = runtime::initialize();
     static DONE: AtomicBool = AtomicBool::new(false);
     DONE.store(false, Ordering::SeqCst);
 
@@ -170,6 +179,7 @@ fn drop_without_join_does_not_cancel_task() {
 
 #[test]
 fn many_tasks_can_be_dropped_without_join() {
+    let _ = runtime::initialize();
     let counter = Arc::new(AtomicU32::new(0));
 
     for _ in 0..100 {
@@ -192,6 +202,7 @@ fn many_tasks_can_be_dropped_without_join() {
 
 #[test]
 fn three_tasks_run_concurrently() {
+    let _ = runtime::initialize();
     use osal_api::traits::task::Task as _;
     use std::thread;
 
@@ -243,6 +254,7 @@ fn three_tasks_run_concurrently() {
 
 #[test]
 fn count_decremented_before_join_returns() {
+    let _ = runtime::initialize();
     use osal_api::traits::task::Task as _;
     let _lock = count_lock();
 
@@ -268,6 +280,7 @@ fn count_decremented_before_join_returns() {
 
 #[test]
 fn two_threads_can_join_same_task() {
+    let _ = runtime::initialize();
     use std::thread;
 
     let task = PosixTaskBuilder::new()
@@ -295,6 +308,7 @@ fn two_threads_can_join_same_task() {
 
 #[test]
 fn spawn_failure_does_not_pollute_count() {
+    let _ = runtime::initialize();
     let _lock = count_lock();
 
     let baseline = PosixTask::count();

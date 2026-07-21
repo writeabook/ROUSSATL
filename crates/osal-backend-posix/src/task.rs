@@ -41,6 +41,7 @@ use osal_api::error::{Error, Result};
 use osal_api::time::Timeout;
 use osal_api::traits::task::{Task, TaskBuilder};
 use osal_api::types::{ExitCode, Priority, TaskHandle};
+use osal_shared::runtime::RuntimeLease;
 
 use crate::sys::condvar::{self, PosixCondvar};
 use crate::sys::mutex::{PosixMutex, PosixMutexGuard};
@@ -168,6 +169,10 @@ struct PosixTaskInner {
     condvar: PosixCondvar,
     join_state: UnsafeCell<JoinState>,
     startup: UnsafeCell<StartupState>,
+    /// Held for the lifetime of the Task handle.  On drop of the last
+    /// clone, decrements the active-object count.  Distinct from
+    /// `LIVE_COUNT`, which tracks executing entries (ADR 0019 §4).
+    _runtime: RuntimeLease<'static>,
 }
 
 // Safety: all state access is guarded by the mutex.
@@ -497,7 +502,12 @@ impl TaskBuilder for PosixTaskBuilder {
     where
         F: FnOnce() + Send + 'static,
     {
+        // 1. Validate parameters first (ADR 0001, ADR 0019 §6).
         validation::validate_task_config(&self.name, self.stack_size)?;
+
+        // 2. Acquire a runtime lease.  If spawn fails later, the
+        //    lease drops with the inner Arc — no leak.
+        let runtime = crate::runtime::acquire_object()?;
 
         // Pre-initialise the TLS key on the parent thread so the
         // child only needs to call pthread_setspecific.
@@ -516,6 +526,7 @@ impl TaskBuilder for PosixTaskBuilder {
             condvar,
             join_state: UnsafeCell::new(JoinState::Running),
             startup: UnsafeCell::new(StartupState::Pending),
+            _runtime: runtime,
         });
 
         let start = Box::new(TaskStart {
