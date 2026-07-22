@@ -55,7 +55,7 @@ Public APIs may change before version 1.0.
 | Capability        | API       | Mock        | POSIX       | Contract    | Facade    |
 |-------------------|-----------|-------------|-------------|-------------|-----------|
 | Queue Core        | Validated | Validated   | Validated   | Validated   | Validated |
-| Queue Blocking    | Validated | Planned     | Validated   | Validated¹  | Validated |
+| Queue Blocking    | Validated | Deferred    | Validated   | Validated¹  | Validated |
 | Queue ISR         | Deferred  | N/A         | N/A         | Deferred    | Deferred  |
 | Mutex             | Validated | Validated   | Validated   | Validated   | Validated |
 | CountingSemaphore | Validated | Validated   | Validated   | Validated   | Validated |
@@ -109,20 +109,27 @@ and target architecture, including crate maturity labels.
 
 ## Documentation
 
-### Source-of-truth hierarchy
+### Documentation authority
 
-1. **Rust public API / Cargo manifests** — what actually compiles
-2. **[Behavior Contract](docs/behavior-contract.md)** — normative
-   backend conformance requirements
-3. **[ADRs](docs/adr/)** — why decisions were made
-4. **[Architecture](docs/architecture.md)** — layer boundaries and
-   dependency rules
-5. **Foundation slices** — per-capability implementation status
-6. **README** — summary snapshot (this file)
-7. **[CHANGELOG](CHANGELOG.md)** — what changed when
+- Rust public APIs and Cargo manifests define the currently available
+  compilation surface (signatures, types, features).
+- The **[Behavior Contract](docs/behavior-contract.md)** defines
+  intended observable backend semantics.
+- An implementation that disagrees with the Behavior Contract has a
+  **conformance defect**; the implementation does not silently
+  redefine the contract.
 
-When documents disagree, the higher-priority source wins.
-See [docs/documentation-policy.md](docs/documentation-policy.md).
+For semantic conflicts between documents, use this order:
+
+1. **[Behavior Contract](docs/behavior-contract.md)**
+2. **[ADRs](docs/adr/)**
+3. **[Architecture](docs/architecture.md)**
+4. **Foundation slices**
+5. **README** (this file)
+6. **[CHANGELOG](CHANGELOG.md)**
+
+See [docs/documentation-policy.md](docs/documentation-policy.md) for
+the full authority model, update triggers, and status terminology.
 
 ### Core design documents
 

@@ -892,8 +892,8 @@ unit. Cloning a public handle **MUST NOT** increase the logical
 active-object count — all clones of one logical object share one
 unit.
 
-Destroying the final handle of the logical object **MUST** release
-that unit exactly once, decrementing `active_objects()`.
+Destroying the final public handle of the logical object **MUST**
+release that unit exactly once, decrementing `active_objects()`.
 
 Internal runtime services (timer service thread, backend control
 blocks) **MUST NOT** contribute to the public `active_objects()`
