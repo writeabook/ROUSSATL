@@ -1,6 +1,34 @@
 # Changelog
 
-## P6B — Runtime Lifecycle (2026-07-20)
+## P6C — Documentation Baseline Freeze (2026-07-22)
+
+### Changed
+
+- Reconciled README status with P6A/P6B implementation progress.
+  Replaced "P0-P5 complete" with current P6B milestone and
+  capability matrix using Validated/Implemented/Foundation/Deferred
+  terminology.
+- Defined documentation source-of-truth hierarchy: code >
+  behavior-contract > ADRs > architecture > foundation slices >
+  README > CHANGELOG.
+- Aligned `architecture.md` runtime model and allocation
+  description with `behavior-contract.md` §2. Removed `alloc`
+  as a Cargo feature; clarified `std` is reserved for future
+  host-only integrations.
+- Split architecture diagrams into current implementation and
+  target extension. Added crate maturity labels.
+- Marked BSP, FreeRTOS, ISR extensions, and EventFlags as
+  explicitly Deferred or Planned.
+- Added `docs/documentation-policy.md` with update triggers,
+  status terminology, and ADR rules.
+
+### Fixed
+
+- Semaphore constructor parameter validation now precedes runtime
+  lease acquisition (ADR 0019 §6).
+- Resolved rustdoc intra-doc links in runtime module documentation.
+
+## P6B — Runtime Lifecycle (2026-07-20) — Completed
 
 ### Added
 

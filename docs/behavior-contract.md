@@ -15,6 +15,16 @@ The contract describes **what** correct behavior looks like, not
 **how** backends achieve it. Two backends may use completely different
 internal mechanisms as long as the observable behavior matches.
 
+### Normative language
+
+The keywords **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and
+**MAY** describe normative backend requirements as defined in
+[RFC 2119](https://datatracker.ietf.org/doc/html/rfc2119).
+
+Statements marked as **Deferred** or **Future** describe planned
+extensions and are not part of the current backend conformance
+requirement.
+
 ---
 
 ## 2. Runtime Model
@@ -860,15 +870,45 @@ Uninitialized → Initializing → Running → ShuttingDown → Uninitialized
 | `acquire()` | `Running` | `Ok(RuntimeLease)` |
 | `acquire()` | any other | `Error::NotInitialized` |
 
+### Managed-object construction contract
+
+Managed-object constructors **MUST** follow this order
+(ADR 0019 §6):
+
+1. Validate parameters → `InvalidParameter` on failure
+2. Acquire `RuntimeLease` → `NotInitialized` if not `Running`
+3. Create native resources → backend-specific error on failure
+4. Construct inner handle with lease
+
+Step 1 errors **MUST** take precedence over step 2 errors.
+If step 3 fails, the local lease is dropped — no active-object
+leak.
+
 ### Object leases
 
-Each user-visible OSAL object (Queue, Mutex, Timer, Task handle)
-holds one `RuntimeLease`. Cloning a handle shares the existing
-lease via the shared inner state — no additional lease is acquired.
+Each user-visible OSAL object (Queue, Mutex, Semaphore, Timer,
+Task handle) **MUST** hold exactly one `RuntimeLease`. Cloning a
+handle **MUST NOT** acquire an additional lease — the clone shares
+the existing lease via the shared inner state (`Arc` or `Rc`).
+
+The last clone drop **MUST** release the lease, decrementing the
+active-object count.
 
 Internal runtime services (timer service thread, backend control
-blocks) do **not** hold leases. Only user objects contribute to
-the active-object count.
+blocks) **MUST NOT** hold leases. Only user-visible logical objects
+contribute to `active_objects()`.
+
+### Error precedence
+
+| Error | Priority | Meaning |
+|-------|----------|---------|
+| `InvalidParameter` | P0 (highest) | Constructor arguments invalid |
+| `NotInitialized` | P1 | Runtime not `Running` |
+| (backend-specific) | P2 | Native resource creation failure |
+| `Internal` | P3 (lowest) | Unexpected platform failure |
+
+`InvalidParameter` **MUST** take precedence over `NotInitialized`
+whenever both conditions hold.
 
 ### Linearisation guarantee
 
