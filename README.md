@@ -11,12 +11,20 @@ across different platforms by switching the backend.
 
 ## Project Status
 
-**Latest completed milestone: P6C — Documentation Baseline Freeze.**
+**Latest completed milestone: P6D — POSIX Backend Conformance Closure.**
 
-The POSIX and Mock MVP covers Queue, Mutex, Semaphore, Clock, Timer,
-System, and Task foundation APIs. Runtime lifecycle (explicit
-`initialize` / `shutdown`, object lease accounting, shutdown gating)
-has been integrated across all managed objects.
+The POSIX backend fully implements the current non-deferred `osal-api`
+trait surface: Queue, Mutex, CountingSemaphore, BinarySemaphore,
+Clock, Timer, System, and Task foundation APIs. All POSIX trait
+implementations are covered by backend or shared contract tests.
+
+The Mock backend implements the same trait surface with the exception
+of blocking Queue contracts (deferred until a deterministic task
+scheduler is implemented).
+
+Advanced task controls (cancellation, suspend/resume, real priority
+scheduling, stack watermark), ISR extension traits, and FreeRTOS
+remain explicitly deferred.
 
 The repository is not yet a production-stable OSAL release.
 Public APIs may change before version 1.0.
@@ -62,11 +70,11 @@ Public APIs may change before version 1.0.
 | BinarySemaphore   | Validated | Validated   | Validated   | Validated   | Validated |
 | Semaphore ISR     | Deferred  | N/A         | N/A         | Deferred    | Deferred  |
 | Clock             | Validated | Validated   | Validated   | Validated   | Validated |
-| Timer             | Validated | Validated   | Implemented | Validated   | Validated |
+| Timer             | Validated | Validated   | Validated   | Validated   | Validated |
 | Timer ISR         | Deferred  | N/A         | N/A         | Deferred    | Deferred  |
 | System            | Validated | Validated   | Validated   | Validated   | Validated |
-| Task Foundation   | Validated | Foundation  | Foundation  | Foundation  | Validated |
-| Runtime Lifecycle | Validated | Implemented | Implemented | Implemented | Implemented |
+| Task Foundation   | Validated | Foundation  | Validated   | Foundation  | Validated |
+| Runtime Lifecycle | Validated | Implemented | Validated   | Implemented | Implemented |
 | ISR Extensions    | Planned   | N/A         | N/A         | Planned     | Planned   |
 | BSP               | Planned   | N/A         | N/A         | N/A         | N/A       |
 | FreeRTOS          | Planned   | N/A         | N/A         | Planned     | Planned   |

@@ -1,5 +1,35 @@
 # Changelog
 
+## P6D — POSIX Backend Conformance Closure (2026-07-22) — Completed
+
+### Verified
+
+- Confirmed that the POSIX backend implements the complete current
+  non-deferred `osal-api` trait surface: Queue, Mutex,
+  CountingSemaphore, BinarySemaphore, Clock, Timer, System, Task,
+  and TaskBuilder.
+- No `todo!()`, `unimplemented!()`, placeholder `panic!()`, or
+  unconditional `Error::Unsupported` in any POSIX trait method.
+- All trait methods have contract test coverage (shared contracts
+  or backend-specific tests).
+- POSIX backend tests, facade tests, and full workspace tests pass.
+- Runtime lifecycle verified: init → create objects → shutdown →
+  re-init cycle works correctly with active-object gating.
+
+### Changed
+
+- Updated capability matrix: POSIX column marked Validated for all
+  current non-deferred capabilities.
+- Updated README project status to reflect P6D completion.
+
+### Deferred (unchanged)
+
+- Advanced task controls (cancellation, suspend/resume, real priority
+  scheduling, stack watermark).
+- ISR extension traits.
+- FreeRTOS backend.
+- Production BSP implementation.
+
 ## P6C — Documentation Baseline Freeze (2026-07-22) — Completed
 
 ### Changed
@@ -28,7 +58,7 @@
   lease acquisition (ADR 0019 §6).
 - Resolved rustdoc intra-doc links in runtime module documentation.
 
-## P6B — Runtime Lifecycle (2026-07-20) — Completed
+## P6B — Runtime Lifecycle (2026-07-21) — Completed
 
 ### Added
 
