@@ -9,37 +9,78 @@ OSAL provides a unified API for developing multi-platform embedded and
 real-time applications. Write your application logic once and run it
 across different platforms by switching the backend.
 
+## Project Status
+
+**Current milestone: P6C — Documentation Baseline Freeze.**
+
+The POSIX and Mock MVP covers Queue, Mutex, Semaphore, Clock, Timer,
+System, and Task foundation APIs. Runtime lifecycle (explicit
+`initialize` / `shutdown`, object lease accounting, shutdown gating)
+has been integrated across all managed objects.
+
+The repository is not yet a production-stable OSAL release.
+Public APIs may change before version 1.0.
+
+### Current MVP Scope
+
+**Supported:**
+
+- POSIX backend (`backend-posix`)
+- Mock backend (`backend-mock`)
+- Queue (core + blocking on POSIX)
+- Mutex (non-recursive, ADR 0007)
+- CountingSemaphore and BinarySemaphore
+- Clock
+- Timer
+- System operations
+- Task foundation (spawn, join with timeout, repeated join, cached exit code)
+- Shared backend contract tests (Core, Blocking where applicable)
+- Facade backend selection
+- Explicit runtime lifecycle (`osal::initialize()` / `osal::shutdown()`)
+
+**Deferred:**
+
+- FreeRTOS backend
+- ISR extension traits (`IsrQueue`, `IsrSemaphore`)
+- Deterministic Mock task scheduler
+- Task cancellation and suspend/resume
+- Real priority scheduling
+- Stack watermark
+- File system, socket, and shell abstractions
+- Production BSP implementation (`osal-bsp` / `osal-bsp-linux` are
+  workspace placeholders only)
+
 ## Capability Matrix
 
-| Capability       | API      | Portable | Mock     | POSIX    | Contract | Facade   |
-|-----------------|----------|----------|----------|----------|----------|----------|
-| Error           | ✓        | —        | ✓        | ✓        | ✓        | ✓        |
-| Timeout         | ✓        | —        | Partial  | ✓        | ✓        | ✓        |
-| Queue Core      | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        |
-| Queue Blocking  | ✓        | —        | Deferred | ✓        | ✓        | ✓        |
-| Queue ISR       | Deferred | —        | —        | —        | —        | —        |
-| Mutex           | ✓        | —        | ✓        | ✓        | ✓        | ✓        |
-| CountingSemaphore | ✓      | ✓        | ✓        | ✓        | ✓        | ✓        |
-| BinarySemaphore | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        |
-| Semaphore ISR   | Deferred | —        | —        | —        | —        | —        |
-| Clock           | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        |
-| Timer           | ✓        | ✓        | ✓        | ✓        | ✓        | ✓        |
-| Timer ISR       | Deferred | —        | —        | —        | —        | —        |
-| System          | ✓        | —        | ✓        | ✓        | ✓        | ✓        |
-| Task            | ✓        | —        | Foundation | Foundation | Smoke    | ✓        |
+| Capability        | API       | Mock        | POSIX       | Contract    | Facade    |
+|-------------------|-----------|-------------|-------------|-------------|-----------|
+| Queue Core        | Validated | Validated   | Validated   | Validated   | Validated |
+| Queue Blocking    | Validated | Planned     | Validated   | POSIX only  | Validated |
+| Queue ISR         | Deferred  | N/A         | N/A         | Deferred    | Deferred  |
+| Mutex             | Validated | Validated   | Validated   | Validated   | Validated |
+| CountingSemaphore | Validated | Validated   | Validated   | Validated   | Validated |
+| BinarySemaphore   | Validated | Validated   | Validated   | Validated   | Validated |
+| Semaphore ISR     | Deferred  | N/A         | N/A         | Deferred    | Deferred  |
+| Clock             | Validated | Validated   | Validated   | Validated   | Validated |
+| Timer             | Validated | Validated   | Implemented | Validated   | Validated |
+| Timer ISR         | Deferred  | N/A         | N/A         | Deferred    | Deferred  |
+| System            | Validated | Validated   | Validated   | Validated   | Validated |
+| Task Foundation   | Validated | Foundation  | Foundation  | Foundation  | Validated |
+| Runtime Lifecycle | Validated | Implemented | Implemented | In progress | Implemented |
+| ISR Extensions    | Planned   | N/A         | N/A         | Planned     | Planned   |
+| BSP               | Planned   | N/A         | N/A         | N/A         | N/A       |
+| FreeRTOS          | Planned   | N/A         | N/A         | Planned     | Planned   |
 
 **Legend:**
-- ✓ — Implemented and tested
-- API only — Trait defined, no backend implementation
-- sys only — Low-level sys wrapper exists, no trait impl yet
-- Partial — Core semantics implemented, blocking deferred
-- Foundation — Foundation semantic complete (some advanced
-  features deferred)
-- Smoke — Smoke contract tests exist; advanced concurrency/load
-  tests deferred
-- Deferred — Planned for future phase
-- skeleton — Contract test skeleton exists, not enabled
-- — — Not applicable to this layer
+
+| Status       | Meaning |
+|-------------|---------|
+| `Validated` | API, implementation, and contract tests complete |
+| `Implemented`| Implemented, contract or edge-case verification ongoing |
+| `Foundation` | Foundation semantics complete; advanced features deferred |
+| `Planned`   | Design exists, implementation not started |
+| `Deferred`  | Explicitly deferred to a future phase |
+| `N/A`       | Not applicable to this layer |
 
 ## Architecture
 
@@ -56,17 +97,34 @@ osal-shared + osal-portable  ← shared logic and helpers
     ↓
 osal-backend-*         ← platform-specific implementations
     ↓
-osal-bsp + osal-bsp-*  ← board support packages
+osal-bsp + osal-bsp-*  ← board support packages (deferred)
 ```
 
-See [docs/architecture.md](docs/architecture.md) for details.
+See [docs/architecture.md](docs/architecture.md) for the full current
+and target architecture, including crate maturity labels.
 
 ## Documentation
+
+### Source-of-truth hierarchy
+
+1. **Rust public API / Cargo manifests** — what actually compiles
+2. **[Behavior Contract](docs/behavior-contract.md)** — normative
+   backend conformance requirements
+3. **[ADRs](docs/adr/)** — why decisions were made
+4. **[Architecture](docs/architecture.md)** — layer boundaries and
+   dependency rules
+5. **Foundation slices** — per-capability implementation status
+6. **README** — summary snapshot (this file)
+7. **[CHANGELOG](CHANGELOG.md)** — what changed when
+
+When documents disagree, the higher-priority source wins.
+See [docs/documentation-policy.md](docs/documentation-policy.md).
 
 ### Core design documents
 
 - [Architecture](docs/architecture.md)
 - [Behavior Contract](docs/behavior-contract.md) — **source of truth** for backend conformance
+- [Documentation Policy](docs/documentation-policy.md) — authority rules and update triggers
 - [Object Lifetime](docs/object-lifetime.md)
 
 ### Foundation slices
@@ -96,6 +154,9 @@ See [docs/architecture.md](docs/architecture.md) for details.
 - [ADR 0014: Backend and BSP Responsibility Boundary](docs/adr/0014-backend-bsp-boundary.md)
 - [ADR 0015: Runtime Lifecycle](docs/adr/0015-runtime-lifecycle.md)
 - [ADR 0016: Linearizable Runtime Lease Accounting](docs/adr/0016-linearizable-runtime-lease.md)
+- [ADR 0017: POSIX no_std Boundary](docs/adr/0017-posix-no-std-boundary.md)
+- [ADR 0018: POSIX Timer Service Lifecycle](docs/adr/0018-posix-timer-service-lifecycle.md)
+- [ADR 0019: Backend Runtime Ownership Without BSP](docs/adr/0019-backend-runtime-ownership.md)
 
 > The English behavior contract (`docs/behavior-contract.md`) is the
 > source of truth for backend conformance. Chinese translations are
@@ -114,16 +175,27 @@ osal = { version = "0.1", default-features = false,
 use osal::prelude::*;
 use core::time::Duration;
 
-fn main() {
+fn main() -> Result<()> {
+    // Initialise the runtime before creating any objects.
+    osal::initialize()?;
+
     // Create a queue
-    let q = Queue::new(8, 4).unwrap();
+    let q = Queue::new(8, 4)?;
 
     // Send a message
-    q.send(&1u32.to_le_bytes(), Timeout::NoWait).unwrap();
+    q.send(&1u32.to_le_bytes(), Timeout::NoWait)?;
 
     // Receive it
     let mut buf = [0u8; 4];
-    q.recv(&mut buf, Timeout::NoWait).unwrap();
+    q.recv(&mut buf, Timeout::NoWait)?;
+
+    let value = u32::from_le_bytes(buf);
+    assert_eq!(value, 1);
+
+    // Drop all objects before shutting down.
+    drop(q);
+    osal::shutdown()?;
+    Ok(())
 }
 ```
 
@@ -157,24 +229,3 @@ controlled clock) live under the respective backend crate:
 ## License
 
 Proprietary. See [LICENSE](LICENSE) for details.
-
-## Status
-
-**P0-P5 complete. All MVP primitives are implemented.**
-
-Task foundation supports spawn, join (NoWait / After / Forever),
-repeated join with cached exit code, handle, priority, current, and
-count. Cancellation, suspend/resume, real priority scheduling, stack
-watermark, and deterministic mock scheduling are deferred.
-
-Queue, Mutex, CountingSemaphore, BinarySemaphore, Clock, Timer, and
-System are implemented across API, Portable, Mock, POSIX, contract
-tests, and facade. Mutex is non-recursive (ADR 0007). System
-critical sections use recursive mutex on POSIX and atomic nesting
-counter on Mock; heap_free() returns conservative `usize::MAX`.
-ISR operations deferred to FreeRTOS phase. Contract tests split
-into Core (all backends) and Blocking (POSIX only).
-
-CI enforces format, clippy, tests, docs, and feature matrix checks.
-
-See [CHANGELOG.md](CHANGELOG.md) for recent API changes.
