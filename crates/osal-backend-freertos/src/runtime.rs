@@ -81,6 +81,14 @@ pub fn active_objects() -> usize {
     RUNTIME.active_objects()
 }
 
+/// Acquire a lease for test purposes.
+///
+/// Only available with `testkit` enabled.
+#[cfg(feature = "testkit")]
+pub fn acquire_object_for_test() -> RuntimeLease<'static> {
+    RUNTIME.acquire().expect("runtime must be Running for test lease")
+}
+
 /// Return a copy of the cached kernel capabilities.
 ///
 /// Returns `None` if called before [`initialize`].
