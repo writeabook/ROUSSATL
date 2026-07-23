@@ -109,6 +109,9 @@ unsafe extern "C" {
     fn osal_freertos_tick_snapshot() -> TickSnapshot;
     fn osal_freertos_delay_ticks(ticks: u64) -> u32;
     fn osal_freertos_max_finite_delay_ticks() -> u64;
+    fn osal_freertos_heap_free() -> u64;
+    fn osal_freertos_enter_critical();
+    fn osal_freertos_exit_critical();
 }
 
 // ---------------------------------------------------------------------------
@@ -260,6 +263,62 @@ pub fn max_finite_delay_ticks() -> u64 {
 }
 
 // ---------------------------------------------------------------------------
+// Heap and critical-section safe wrappers (ADR 0024)
+// ---------------------------------------------------------------------------
+
+/// Return the current FreeRTOS kernel heap free space in bytes.
+pub fn heap_free() -> u64 {
+    #[cfg(feature = "test-fixture")]
+    {
+        HEAP_FREE_FIXTURE.load(core::sync::atomic::Ordering::Relaxed)
+    }
+    #[cfg(not(feature = "test-fixture"))]
+    {
+        unsafe { osal_freertos_heap_free() }
+    }
+}
+
+/// Enter a critical section (nesting supported natively).
+///
+/// Each call must be paired with a matching [`exit_critical`].
+pub fn enter_critical() {
+    #[cfg(feature = "test-fixture")]
+    {
+        CRITICAL_DEPTH_FIXTURE.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+    }
+    #[cfg(not(feature = "test-fixture"))]
+    {
+        unsafe { osal_freertos_enter_critical() };
+    }
+}
+
+/// Exit a critical section.
+///
+/// # Safety (caller)
+///
+/// Must be paired with a prior [`enter_critical`].  Unbalanced exit
+/// corrupts the kernel's nesting counter.
+pub fn exit_critical() {
+    #[cfg(feature = "test-fixture")]
+    {
+        let prev = CRITICAL_DEPTH_FIXTURE.fetch_sub(1, core::sync::atomic::Ordering::Relaxed);
+        if prev == 0 {
+            panic!("exit_critical() called without matching enter_critical()");
+        }
+    }
+    #[cfg(not(feature = "test-fixture"))]
+    {
+        unsafe { osal_freertos_exit_critical() };
+    }
+}
+
+/// Return the current critical-section nesting depth (fixture only).
+#[cfg(feature = "test-fixture")]
+pub fn critical_depth() -> usize {
+    CRITICAL_DEPTH_FIXTURE.load(core::sync::atomic::Ordering::Relaxed) as usize
+}
+
+// ---------------------------------------------------------------------------
 // Fixture state (test-fixture only)
 // ---------------------------------------------------------------------------
 
@@ -277,6 +336,14 @@ static TICK_COUNT_FIXTURE: core::sync::atomic::AtomicU64 =
 #[cfg(feature = "test-fixture")]
 static SCHEDULER_STATE_FIXTURE: core::sync::atomic::AtomicU32 =
     core::sync::atomic::AtomicU32::new(SCHEDULER_RUNNING);
+
+#[cfg(feature = "test-fixture")]
+static HEAP_FREE_FIXTURE: core::sync::atomic::AtomicU64 =
+    core::sync::atomic::AtomicU64::new(65536);
+
+#[cfg(feature = "test-fixture")]
+static CRITICAL_DEPTH_FIXTURE: core::sync::atomic::AtomicU64 =
+    core::sync::atomic::AtomicU64::new(0);
 
 #[cfg(feature = "test-fixture")]
 fn read_tick_fixture() -> TickSnapshot {
@@ -304,6 +371,8 @@ pub mod fixture {
         super::TICK_OVERFLOW_FIXTURE.store(0, Ordering::Relaxed);
         super::TICK_COUNT_FIXTURE.store(0, Ordering::Relaxed);
         super::SCHEDULER_STATE_FIXTURE.store(super::SCHEDULER_RUNNING, Ordering::Relaxed);
+        super::HEAP_FREE_FIXTURE.store(65536, Ordering::Relaxed);
+        super::CRITICAL_DEPTH_FIXTURE.store(0, Ordering::Relaxed);
     }
 
     /// Set the tick snapshot that `tick_snapshot()` will return.
@@ -321,5 +390,15 @@ pub mod fixture {
             super::SchedulerState::Unknown(v) => v,
         };
         super::SCHEDULER_STATE_FIXTURE.store(raw, Ordering::Relaxed);
+    }
+
+    /// Set the value returned by `heap_free()`.
+    pub fn set_heap_free(bytes: u64) {
+        super::HEAP_FREE_FIXTURE.store(bytes, Ordering::Relaxed);
+    }
+
+    /// Return the current critical-section nesting depth.
+    pub fn critical_depth() -> usize {
+        super::CRITICAL_DEPTH_FIXTURE.load(Ordering::Relaxed) as usize
     }
 }

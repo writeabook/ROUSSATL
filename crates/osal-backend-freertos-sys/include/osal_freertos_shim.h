@@ -73,6 +73,14 @@ osal_freertos_tick_snapshot_t osal_freertos_tick_snapshot(void);
 uint32_t osal_freertos_delay_ticks(uint64_t ticks);
 uint64_t osal_freertos_max_finite_delay_ticks(void);
 
+// ---------------------------------------------------------------------------
+// Heap and critical-section API (ADR 0024)
+// ---------------------------------------------------------------------------
+
+uint64_t osal_freertos_heap_free(void);
+void osal_freertos_enter_critical(void);
+void osal_freertos_exit_critical(void);
+
 #ifdef __cplusplus
 }
 #endif

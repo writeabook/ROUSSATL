@@ -13,6 +13,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "portmacro.h"
+#include "portable.h"
 
 // ---------------------------------------------------------------------------
 // Compile-time configuration checks (ADR 0021)
@@ -151,4 +152,24 @@ uint32_t osal_freertos_delay_ticks(uint64_t ticks) {
 
 uint64_t osal_freertos_max_finite_delay_ticks(void) {
     return (uint64_t)(portMAX_DELAY - 1);
+}
+
+// ---------------------------------------------------------------------------
+// Heap (ADR 0024 §1)
+// ---------------------------------------------------------------------------
+
+uint64_t osal_freertos_heap_free(void) {
+    return (uint64_t)xPortGetFreeHeapSize();
+}
+
+// ---------------------------------------------------------------------------
+// Critical section (ADR 0024 §2)
+// ---------------------------------------------------------------------------
+
+void osal_freertos_enter_critical(void) {
+    taskENTER_CRITICAL();
+}
+
+void osal_freertos_exit_critical(void) {
+    taskEXIT_CRITICAL();
 }
