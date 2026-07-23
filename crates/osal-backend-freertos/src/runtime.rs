@@ -8,7 +8,7 @@ use osal_api::error::Result;
 use osal_api::runtime::RuntimeState;
 use osal_shared::runtime::{RuntimeLease, RuntimeLifecycle};
 
-use osal_backend_freertos_sys::KernelCapabilities;
+use osal_backend_freertos_sys::Capabilities;
 
 // ---------------------------------------------------------------------------
 // Backend-local lifecycle instance (ADR 0019 §1)
@@ -16,8 +16,10 @@ use osal_backend_freertos_sys::KernelCapabilities;
 
 static RUNTIME: RuntimeLifecycle = RuntimeLifecycle::new();
 
-/// Cached kernel capabilities, populated during [`initialize`].
-static mut CAPABILITIES: Option<KernelCapabilities> = None;
+/// Cached kernel capabilities — written once during [`initialize`],
+/// cleared during [`shutdown`].  Safe `spin::RwLock` replaces
+/// `static mut` (no unsafe, no data races).
+static CAPABILITIES: spin::RwLock<Option<Capabilities>> = spin::RwLock::new(None);
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -34,12 +36,8 @@ pub fn initialize() -> Result<()> {
     let transition = RUNTIME.begin_initialize()?;
 
     // Probe and cache kernel capabilities.
-    let caps = osal_backend_freertos_sys::probe_capabilities();
-    // SAFETY: single-threaded at init time (scheduler not yet started
-    // or this is called from a single init path).
-    unsafe {
-        CAPABILITIES = Some(caps);
-    }
+    let caps = osal_backend_freertos_sys::capabilities();
+    *CAPABILITIES.write() = Some(caps);
 
     transition.commit();
     Ok(())
@@ -54,11 +52,7 @@ pub fn shutdown() -> Result<()> {
     let transition = RUNTIME.begin_shutdown()?;
 
     // Clear cached capabilities so re-initialisation re-probes.
-    // SAFETY: shutdown requires no active leases; no concurrent
-    // access to CAPABILITIES.
-    unsafe {
-        CAPABILITIES = None;
-    }
+    *CAPABILITIES.write() = None;
 
     transition.commit();
     Ok(())
@@ -82,20 +76,21 @@ pub fn active_objects() -> usize {
 }
 
 /// Acquire a lease for test purposes.
-///
-/// Only available with `testkit` enabled.
 #[cfg(feature = "testkit")]
 pub fn acquire_object_for_test() -> RuntimeLease<'static> {
-    RUNTIME.acquire().expect("runtime must be Running for test lease")
+    RUNTIME
+        .acquire()
+        .expect("runtime must be Running for test lease")
 }
 
 /// Return a copy of the cached kernel capabilities.
 ///
 /// Returns `None` if called before [`initialize`].
-pub(crate) fn capabilities() -> Option<KernelCapabilities> {
-    // SAFETY: CAPABILITIES is written once during initialize()
-    // (single-threaded) and cleared during shutdown (after all
-    // leases are released).  Reads during normal operation see
-    // either None (uninitialised) or the cached value.
-    unsafe { CAPABILITIES }
+pub(crate) fn capabilities() -> Option<Capabilities> {
+    *CAPABILITIES.read()
+}
+
+/// Query the current FreeRTOS scheduler state (dynamic — never cached).
+pub fn scheduler_state() -> osal_backend_freertos_sys::SchedulerState {
+    osal_backend_freertos_sys::scheduler_state()
 }

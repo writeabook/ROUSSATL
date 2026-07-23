@@ -6,7 +6,15 @@
 #include "osal_freertos_shim.h"
 
 // ---------------------------------------------------------------------------
-// Compile-time configuration checks
+// FreeRTOS headers — must come first so config macros are visible.
+// FreeRTOSConfig.h is included by FreeRTOS.h from the application/BSP.
+// ---------------------------------------------------------------------------
+
+#include "FreeRTOS.h"
+#include "task.h"
+
+// ---------------------------------------------------------------------------
+// Compile-time configuration checks (ADR 0021)
 // ---------------------------------------------------------------------------
 
 #ifndef configSUPPORT_DYNAMIC_ALLOCATION
@@ -33,21 +41,20 @@
 #ifndef configTICK_RATE_HZ
 #error "FreeRTOSConfig.h must define configTICK_RATE_HZ"
 #endif
+_Static_assert(configTICK_RATE_HZ > 0,
+               "configTICK_RATE_HZ must be greater than zero");
 
 #ifndef configMAX_PRIORITIES
 #error "FreeRTOSConfig.h must define configMAX_PRIORITIES"
 #endif
+_Static_assert(configMAX_PRIORITIES > 0,
+               "configMAX_PRIORITIES must be greater than zero");
 
 #ifndef configMAX_TASK_NAME_LEN
 #error "FreeRTOSConfig.h must define configMAX_TASK_NAME_LEN"
 #endif
-
-// ---------------------------------------------------------------------------
-// FreeRTOS headers
-// ---------------------------------------------------------------------------
-
-#include "FreeRTOS.h"
-#include "task.h"
+_Static_assert(configMAX_TASK_NAME_LEN > 0,
+               "configMAX_TASK_NAME_LEN must be greater than zero");
 
 // ---------------------------------------------------------------------------
 // Capability probe
@@ -62,7 +69,6 @@ osal_freertos_capability_t osal_freertos_probe_capabilities(void) {
     cap.stack_word_size   = (uint8_t)  sizeof(StackType_t);
     cap.dynamic_allocation = 1;  // enforced by #error above
     cap.software_timers    = 1;  // enforced by #error above
-    cap.scheduler_state    = (uint32_t) xTaskGetSchedulerState();
     return cap;
 }
 

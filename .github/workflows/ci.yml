@@ -53,6 +53,12 @@ jobs:
       - name: Mock backend compiles
         run: cargo check -p osal --no-default-features --features backend-mock
 
+      - name: FreeRTOS fixture compiles
+        run: cargo check -p osal --no-default-features --features freertos-test-fixture
+
+      - name: FreeRTOS backend skeleton compiles
+        run: cargo check -p osal-backend-freertos --features test-fixture
+
       - name: No backend must fail
         run: |
           if cargo check -p osal --no-default-features 2>/dev/null; then
@@ -60,10 +66,31 @@ jobs:
             exit 1
           fi
 
-      - name: Multiple backends must fail
+      - name: POSIX + Mock must fail
         run: |
           if cargo check -p osal --no-default-features --features backend-posix,backend-mock 2>/dev/null; then
-            echo "Expected multi-backend build to fail"
+            echo "Expected posix+mock build to fail"
+            exit 1
+          fi
+
+      - name: POSIX + FreeRTOS must fail
+        run: |
+          if cargo check -p osal --no-default-features --features backend-posix,backend-freertos 2>/dev/null; then
+            echo "Expected posix+freertos build to fail"
+            exit 1
+          fi
+
+      - name: Mock + FreeRTOS must fail
+        run: |
+          if cargo check -p osal --no-default-features --features backend-mock,backend-freertos 2>/dev/null; then
+            echo "Expected mock+freertos build to fail"
+            exit 1
+          fi
+
+      - name: All three backends must fail
+        run: |
+          if cargo check -p osal --no-default-features --features backend-posix,backend-mock,backend-freertos 2>/dev/null; then
+            echo "Expected three-backend build to fail"
             exit 1
           fi
 

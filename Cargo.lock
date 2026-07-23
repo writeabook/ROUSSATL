@@ -3,6 +3,22 @@
 version = 4
 
 [[package]]
+name = "cc"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c89588d05638b5b4594a3348a2d6c20277e43a7f5c5202b05cc56888475a47b8"
+dependencies = [
+ "find-msvc-tools",
+ "shlex",
+]
+
+[[package]]
+name = "find-msvc-tools"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
+
+[[package]]
 name = "libc"
 version = "0.2.186"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -22,6 +38,7 @@ name = "osal"
 version = "0.1.0"
 dependencies = [
  "osal-api",
+ "osal-backend-freertos",
  "osal-backend-mock",
  "osal-backend-posix",
  "osal-shared",
@@ -30,6 +47,24 @@ dependencies = [
 [[package]]
 name = "osal-api"
 version = "0.1.0"
+
+[[package]]
+name = "osal-backend-freertos"
+version = "0.1.0"
+dependencies = [
+ "osal-api",
+ "osal-backend-freertos-sys",
+ "osal-shared",
+ "osal-testkit",
+ "spin",
+]
+
+[[package]]
+name = "osal-backend-freertos-sys"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
 
 [[package]]
 name = "osal-backend-mock"
@@ -91,6 +126,12 @@ name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
+
+[[package]]
+name = "shlex"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
 name = "spin"

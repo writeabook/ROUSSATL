@@ -13,15 +13,15 @@
 #![no_std]
 
 // ---------------------------------------------------------------------------
-// Platform gate
+// Platform gate: fixture OR native FreeRTOS build are the two valid paths.
+// When neither is active the crate cannot compile — the user must either
+// enable test-fixture (host CI) or provide the env vars for a native build.
 // ---------------------------------------------------------------------------
 
-#[cfg(not(any(
-    feature = "test-fixture",
-    // Future: target_os = "freertos",
-)))]
+#[cfg(not(feature = "test-fixture"))]
 compile_error!(
-    "osal-backend-freertos-sys requires a FreeRTOS target or --features test-fixture. \
+    "osal-backend-freertos-sys: enable 'test-fixture' for host builds, \
+     or set ROUSSATL_FREERTOS_*_INCLUDE env vars for a native FreeRTOS build. \
      See ADR 0022 §6."
 );
 
@@ -49,6 +49,10 @@ pub type EventGroupHandle = *mut core::ffi::c_void;
 // ---------------------------------------------------------------------------
 
 /// Kernel capabilities probed from `FreeRTOSConfig.h` at compile time.
+///
+/// Fields match the C `osal_freertos_capability_t` layout exactly.
+/// Boolean-like fields are `u8` because C has no `bool` in FFI.
+/// Use [`capabilities()`] to get a Rust-friendly view.
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct KernelCapabilities {
@@ -57,9 +61,8 @@ pub struct KernelCapabilities {
     pub max_task_name_len: u32,
     pub tick_bits: u8,
     pub stack_word_size: u8,
-    pub dynamic_allocation: bool,
-    pub software_timers: bool,
-    pub scheduler_state: u32,
+    pub dynamic_allocation: u8,
+    pub software_timers: u8,
 }
 
 /// Scheduler state constants.
@@ -80,14 +83,38 @@ unsafe extern "C" {
 // Safe wrappers
 // ---------------------------------------------------------------------------
 
-/// Probe kernel capabilities.
+/// Rust-friendly capability view (converts C `u8` fields to `bool`).
+#[derive(Debug, Clone, Copy)]
+pub struct Capabilities {
+    pub tick_rate_hz: u32,
+    pub max_priorities: u32,
+    pub max_task_name_len: u32,
+    pub tick_bits: u8,
+    pub stack_word_size: u8,
+    pub dynamic_allocation: bool,
+    pub software_timers: bool,
+}
+
+/// Probe kernel capabilities and return a Rust-friendly view.
+pub fn capabilities() -> Capabilities {
+    let raw = probe_capabilities();
+    Capabilities {
+        tick_rate_hz: raw.tick_rate_hz,
+        max_priorities: raw.max_priorities,
+        max_task_name_len: raw.max_task_name_len,
+        tick_bits: raw.tick_bits,
+        stack_word_size: raw.stack_word_size,
+        dynamic_allocation: raw.dynamic_allocation != 0,
+        software_timers: raw.software_timers != 0,
+    }
+}
+
+/// Probe raw kernel capabilities (C ABI).
 ///
 /// # Test fixture
 ///
-/// When `test-fixture` is enabled, returns fixed stub values so the
-/// backend crate and its tests compile and run on a host without a
-/// FreeRTOS toolchain.
-pub fn probe_capabilities() -> KernelCapabilities {
+/// When `test-fixture` is enabled, returns fixed stub values.
+fn probe_capabilities() -> KernelCapabilities {
     #[cfg(feature = "test-fixture")]
     {
         KernelCapabilities {
@@ -96,9 +123,8 @@ pub fn probe_capabilities() -> KernelCapabilities {
             max_task_name_len: 16,
             tick_bits: 32,
             stack_word_size: 4,
-            dynamic_allocation: true,
-            software_timers: true,
-            scheduler_state: SCHEDULER_RUNNING,
+            dynamic_allocation: 1,
+            software_timers: 1,
         }
     }
     #[cfg(not(feature = "test-fixture"))]
@@ -107,14 +133,35 @@ pub fn probe_capabilities() -> KernelCapabilities {
     }
 }
 
-/// Query the current FreeRTOS scheduler state.
-pub fn scheduler_state() -> u32 {
+/// Scheduler run-state (dynamic — never cached).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SchedulerState {
+    NotStarted,
+    Running,
+    Suspended,
+    Unknown(u32),
+}
+
+impl SchedulerState {
+    fn from_raw(raw: u32) -> Self {
+        match raw {
+            SCHEDULER_NOT_STARTED => SchedulerState::NotStarted,
+            SCHEDULER_RUNNING => SchedulerState::Running,
+            SCHEDULER_SUSPENDED => SchedulerState::Suspended,
+            other => SchedulerState::Unknown(other),
+        }
+    }
+}
+
+/// Query the current FreeRTOS scheduler state (dynamic).
+pub fn scheduler_state() -> SchedulerState {
     #[cfg(feature = "test-fixture")]
     {
-        SCHEDULER_RUNNING
+        SchedulerState::Running
     }
     #[cfg(not(feature = "test-fixture"))]
     {
-        unsafe { osal_freertos_scheduler_state() }
+        let raw = unsafe { osal_freertos_scheduler_state() };
+        SchedulerState::from_raw(raw)
     }
 }

@@ -28,6 +28,10 @@
 //!
 //! # Mock (testing, simulation)
 //! osal = { version = "0.1", default-features = false, features = ["backend-mock"] }
+//!
+//! # FreeRTOS (embedded — requires FreeRTOS kernel + config)
+//! osal = { version = "0.1", default-features = false,
+//!          features = ["backend-freertos"] }
 //! ```
 //!
 //! Only one backend may be active at a time. The compilation fails

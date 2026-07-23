@@ -11,20 +11,23 @@ across different platforms by switching the backend.
 
 ## Project Status
 
-**Latest completed milestone: P6D — POSIX Backend Conformance Closure.**
+**Latest milestone: P7A — FreeRTOS Integration Boundary and Backend Skeleton.**
 
 The POSIX backend fully implements the current non-deferred `osal-api`
-trait surface: Queue, Mutex, CountingSemaphore, BinarySemaphore,
-Clock, Timer, System, and Task foundation APIs. All POSIX trait
-implementations are covered by backend or shared contract tests.
-
-The Mock backend implements the same trait surface with the exception
-of blocking Queue contracts (deferred until a deterministic task
+trait surface. The Mock backend implements the same surface with the
+exception of blocking Queue contracts (deferred until a deterministic
 scheduler is implemented).
 
+FreeRTOS integration skeleton: ADRs 0020–0022 define scheduler
+ownership, configuration contract, and FFI boundary. The
+`osal-backend-freertos` crate provides `initialize`/`shutdown`/
+`runtime_state` with a C shim capability probe. FreeRTOS primitive
+implementations (Queue, Mutex, Task, Timer, etc.) are deferred to
+P7B+.
+
 Advanced task controls (cancellation, suspend/resume, real priority
-scheduling, stack watermark), ISR extension traits, and FreeRTOS
-remain explicitly deferred.
+scheduling, stack watermark), ISR extension traits, and production
+BSP implementation remain explicitly deferred.
 
 The repository is not yet a production-stable OSAL release.
 Public APIs may change before version 1.0.
@@ -48,7 +51,6 @@ Public APIs may change before version 1.0.
 
 **Deferred:**
 
-- FreeRTOS backend
 - ISR extension traits (`IsrQueue`, `IsrSemaphore`)
 - Deterministic Mock task scheduler
 - Task cancellation and suspend/resume
@@ -60,24 +62,23 @@ Public APIs may change before version 1.0.
 
 ## Capability Matrix
 
-| Capability        | API       | Mock        | POSIX       | Contract    | Facade    |
-|-------------------|-----------|-------------|-------------|-------------|-----------|
-| Queue Core        | Validated | Validated   | Validated   | Validated   | Validated |
-| Queue Blocking    | Validated | Deferred    | Validated   | Validated¹  | Validated |
-| Queue ISR         | Deferred  | N/A         | N/A         | Deferred    | Deferred  |
-| Mutex             | Validated | Validated   | Validated   | Validated   | Validated |
-| CountingSemaphore | Validated | Validated   | Validated   | Validated   | Validated |
-| BinarySemaphore   | Validated | Validated   | Validated   | Validated   | Validated |
-| Semaphore ISR     | Deferred  | N/A         | N/A         | Deferred    | Deferred  |
-| Clock             | Validated | Validated   | Validated   | Validated   | Validated |
-| Timer             | Validated | Validated   | Validated   | Validated   | Validated |
-| Timer ISR         | Deferred  | N/A         | N/A         | Deferred    | Deferred  |
-| System            | Validated | Validated   | Validated   | Validated   | Validated |
-| Task Foundation   | Validated | Foundation  | Validated   | Foundation  | Validated |
-| Runtime Lifecycle | Validated | Implemented | Validated   | Implemented | Implemented |
-| ISR Extensions    | Planned   | N/A         | N/A         | Planned     | Planned   |
-| BSP               | Planned   | N/A         | N/A         | N/A         | N/A       |
-| FreeRTOS          | Planned   | N/A         | N/A         | Planned     | Planned   |
+| Capability        | API       | Mock        | POSIX       | FreeRTOS   | Contract    | Facade    |
+|-------------------|-----------|-------------|-------------|------------|-------------|-----------|
+| Queue Core        | Validated | Validated   | Validated   | Planned    | Validated   | Validated |
+| Queue Blocking    | Validated | Deferred    | Validated   | Planned    | Validated¹  | Validated |
+| Queue ISR         | Deferred  | N/A         | N/A         | Deferred   | Deferred    | Deferred  |
+| Mutex             | Validated | Validated   | Validated   | Planned    | Validated   | Validated |
+| CountingSemaphore | Validated | Validated   | Validated   | Planned    | Validated   | Validated |
+| BinarySemaphore   | Validated | Validated   | Validated   | Planned    | Validated   | Validated |
+| Semaphore ISR     | Deferred  | N/A         | N/A         | Deferred   | Deferred    | Deferred  |
+| Clock             | Validated | Validated   | Validated   | Planned    | Validated   | Validated |
+| Timer             | Validated | Validated   | Validated   | Planned    | Validated   | Validated |
+| Timer ISR         | Deferred  | N/A         | N/A         | Deferred   | Deferred    | Deferred  |
+| System            | Validated | Validated   | Validated   | Planned    | Validated   | Validated |
+| Task Foundation   | Validated | Foundation  | Validated   | Planned    | Foundation  | Validated |
+| Runtime Lifecycle | Validated | Implemented | Validated   | Skeleton   | Implemented | Implemented |
+| ISR Extensions    | Planned   | N/A         | N/A         | Planned    | Planned     | Planned   |
+| BSP               | Planned   | N/A         | N/A         | N/A        | N/A         | N/A       |
 
 **Legend:**
 

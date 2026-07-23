@@ -14,10 +14,10 @@ crate-type = ["rlib"]
 default = ["backend-posix"]
 backend-posix = ["dep:osal-backend-posix"]
 backend-mock = ["dep:osal-backend-mock"]
-backend-freertos = [
-    "dep:osal-backend-freertos",
-    "dep:osal-backend-freertos-sys",
-    "osal-backend-freertos-sys/test-fixture",
+backend-freertos = ["dep:osal-backend-freertos"]
+freertos-test-fixture = [
+    "backend-freertos",
+    "osal-backend-freertos/test-fixture",
 ]
 
 std = ["osal-api/std"]
@@ -28,4 +28,3 @@ osal-shared = { path = "../osal-shared" }
 osal-backend-posix = { path = "../osal-backend-posix", optional = true }
 osal-backend-mock = { path = "../osal-backend-mock", optional = true }
 osal-backend-freertos = { path = "../osal-backend-freertos", optional = true }
-osal-backend-freertos-sys = { path = "../osal-backend-freertos-sys", optional = true }

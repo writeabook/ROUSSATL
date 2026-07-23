@@ -25,7 +25,6 @@ typedef struct {
     uint8_t  stack_word_size;    // sizeof(StackType_t)
     uint8_t  dynamic_allocation; // configSUPPORT_DYNAMIC_ALLOCATION != 0
     uint8_t  software_timers;    // configUSE_TIMERS != 0
-    uint32_t scheduler_state;    // from xTaskGetSchedulerState()
 } osal_freertos_capability_t;
 
 // ---------------------------------------------------------------------------
