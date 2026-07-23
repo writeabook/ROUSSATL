@@ -27,19 +27,45 @@ pub fn remaining_until(now: Duration, deadline: Duration) -> Duration {
 /// the first multiple of `period` that is strictly greater than `now`.
 /// Merges missed periods into a single advance.
 ///
+/// Uses O(1) arithmetic instead of iterating period-by-period.
+/// Handles arbitrarily large gaps (e.g. system sleep / debug halt).
+///
 /// Returns `Error::Overflow` if the computation overflows.
 pub fn next_periodic_deadline(
     previous_deadline: Duration,
     period: Duration,
     now: Duration,
 ) -> Result<Duration> {
-    let mut next = previous_deadline;
-    loop {
-        next = next.checked_add(period).ok_or(Error::Overflow)?;
-        if next > now {
-            return Ok(next);
-        }
+    // Guard: period must be non-zero (validated by caller).
+    if period.is_zero() {
+        return Err(Error::InvalidParameter);
     }
+
+    // If already ahead of now, return as-is.
+    if previous_deadline > now {
+        return Ok(previous_deadline);
+    }
+
+    // O(1): compute how many periods have elapsed since the previous
+    // deadline, then advance by (missed + 1).
+    let elapsed_ns = now
+        .checked_sub(previous_deadline)
+        .unwrap_or(Duration::ZERO)
+        .as_nanos();
+    let period_ns = period.as_nanos();
+
+    // missed = floor(elapsed / period) + 1  → next after now
+    let missed = elapsed_ns
+        .checked_div(period_ns)
+        .and_then(|n| n.checked_add(1))
+        .ok_or(Error::Overflow)?;
+
+    let advance_ns = period_ns.checked_mul(missed).ok_or(Error::Overflow)?;
+    let advance = Duration::from_nanos(u64::try_from(advance_ns).map_err(|_| Error::Overflow)?);
+
+    previous_deadline
+        .checked_add(advance)
+        .ok_or(Error::Overflow)
 }
 
 #[cfg(test)]
@@ -114,11 +140,34 @@ mod tests {
     }
 
     #[test]
-    fn periodic_overflow() {
+    fn periodic_not_passed_yet() {
+        // Deadline is already ahead of now — no advance needed.
+        let n = next_periodic_deadline(
+            Duration::MAX,
+            Duration::from_secs(1),
+            Duration::ZERO,
+        )
+        .unwrap();
+        assert_eq!(n, Duration::MAX);
+    }
+
+    #[test]
+    fn periodic_overflow_on_advance() {
+        // Near the u64 limit with a large period — overflow in
+        // checked arithmetic.
+        let deadline = Duration::new(u64::MAX / 2, 0);
+        let period = Duration::new(u64::MAX / 2 + 1, 0);
+        let now = Duration::new(u64::MAX / 2 + 100, 0);
+        let result = next_periodic_deadline(deadline, period, now);
+        assert_eq!(result, Err(Error::Overflow));
+    }
+
+    #[test]
+    fn periodic_zero_period_defensive() {
         assert_eq!(
-            next_periodic_deadline(Duration::MAX, Duration::from_secs(1), Duration::ZERO)
+            next_periodic_deadline(Duration::from_secs(1), Duration::ZERO, Duration::from_secs(2))
                 .unwrap_err(),
-            Error::Overflow
+            Error::InvalidParameter
         );
     }
 }
