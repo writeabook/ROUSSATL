@@ -12,6 +12,7 @@
 
 #include "FreeRTOS.h"
 #include "task.h"
+#include "portmacro.h"
 
 // ---------------------------------------------------------------------------
 // Compile-time configuration checks (ADR 0021)
@@ -29,6 +30,13 @@
 #endif
 #if INCLUDE_xTaskGetSchedulerState != 1
 #error "OSAL FreeRTOS backend requires INCLUDE_xTaskGetSchedulerState = 1"
+#endif
+
+#ifndef INCLUDE_vTaskDelay
+#error "FreeRTOSConfig.h must define INCLUDE_vTaskDelay"
+#endif
+#if INCLUDE_vTaskDelay != 1
+#error "OSAL FreeRTOS backend requires INCLUDE_vTaskDelay = 1"
 #endif
 
 #ifndef configUSE_TIMERS
@@ -55,6 +63,13 @@ _Static_assert(configMAX_PRIORITIES > 0,
 #endif
 _Static_assert(configMAX_TASK_NAME_LEN > 0,
                "configMAX_TASK_NAME_LEN must be greater than zero");
+
+// P7B: single-core only (ADR 0024 §5)
+#ifndef configNUMBER_OF_CORES
+#error "FreeRTOSConfig.h must define configNUMBER_OF_CORES"
+#endif
+_Static_assert(configNUMBER_OF_CORES == 1,
+               "P7B FreeRTOS backend requires configNUMBER_OF_CORES == 1");
 
 // ---------------------------------------------------------------------------
 // Capability probe
@@ -91,4 +106,49 @@ uint32_t osal_freertos_scheduler_state(void) {
         return OSAL_FREERTOS_SCHEDULER_SUSPENDED;
     }
     return OSAL_FREERTOS_SCHEDULER_UNKNOWN;
+}
+
+// ---------------------------------------------------------------------------
+// Tick snapshot (ADR 0023 §1)
+// ---------------------------------------------------------------------------
+
+osal_freertos_tick_snapshot_t osal_freertos_tick_snapshot(void) {
+    TimeOut_t native;
+    osal_freertos_tick_snapshot_t result;
+
+    vTaskSetTimeOutState(&native);
+
+    result.overflow_count = (uint64_t)(UBaseType_t)native.xOverflowCount;
+    result.tick_count     = (uint64_t)native.xTimeOnEntering;
+
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// Delay (ADR 0023 §5-6)
+// ---------------------------------------------------------------------------
+
+uint32_t osal_freertos_delay_ticks(uint64_t ticks) {
+    // Zero ticks: return immediately (caller should handle this case).
+    if (ticks == 0) {
+        return OSAL_FREERTOS_DELAY_OK;
+    }
+
+    // Validate tick range — must not exceed portMAX_DELAY - 1.
+    if (ticks > (uint64_t)(portMAX_DELAY - 1)) {
+        return OSAL_FREERTOS_DELAY_INVALID_TICKS;
+    }
+
+    // Scheduler must be Running for non-zero delay.
+    BaseType_t state = xTaskGetSchedulerState();
+    if (state != taskSCHEDULER_RUNNING) {
+        return OSAL_FREERTOS_DELAY_SCHEDULER_STOPPED;
+    }
+
+    vTaskDelay((TickType_t)ticks);
+    return OSAL_FREERTOS_DELAY_OK;
+}
+
+uint64_t osal_freertos_max_finite_delay_ticks(void) {
+    return (uint64_t)(portMAX_DELAY - 1);
 }

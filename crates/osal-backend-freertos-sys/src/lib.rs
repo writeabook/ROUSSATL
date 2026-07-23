@@ -58,6 +58,47 @@ pub const SCHEDULER_RUNNING: u32 = 1;
 pub const SCHEDULER_SUSPENDED: u32 = 2;
 
 // ---------------------------------------------------------------------------
+// Tick snapshot (ADR 0023 §1)
+// ---------------------------------------------------------------------------
+
+/// Coherent kernel tick snapshot — compatible with C `osal_freertos_tick_snapshot_t`.
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+pub struct TickSnapshot {
+    pub overflow_count: u64,
+    pub tick_count: u64,
+}
+
+// ---------------------------------------------------------------------------
+// Delay status codes (ADR 0023 §5)
+// ---------------------------------------------------------------------------
+
+pub const DELAY_OK: u32 = 0;
+pub const DELAY_INVALID_TICKS: u32 = 1;
+pub const DELAY_SCHEDULER_STOPPED: u32 = 2;
+
+/// Outcome of `delay_ticks()`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DelayStatus {
+    Ok,
+    InvalidTicks,
+    SchedulerNotRunning,
+    Unknown(u32),
+}
+
+impl DelayStatus {
+    #[cfg(not(feature = "test-fixture"))]
+    fn from_raw(raw: u32) -> Self {
+        match raw {
+            DELAY_OK => DelayStatus::Ok,
+            DELAY_INVALID_TICKS => DelayStatus::InvalidTicks,
+            DELAY_SCHEDULER_STOPPED => DelayStatus::SchedulerNotRunning,
+            other => DelayStatus::Unknown(other),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // FFI declarations (native path only — fixture uses Rust stubs)
 // ---------------------------------------------------------------------------
 
@@ -65,6 +106,9 @@ pub const SCHEDULER_SUSPENDED: u32 = 2;
 unsafe extern "C" {
     fn osal_freertos_probe_capabilities() -> KernelCapabilities;
     fn osal_freertos_scheduler_state() -> u32;
+    fn osal_freertos_tick_snapshot() -> TickSnapshot;
+    fn osal_freertos_delay_ticks(ticks: u64) -> u32;
+    fn osal_freertos_max_finite_delay_ticks() -> u64;
 }
 
 // ---------------------------------------------------------------------------
@@ -131,7 +175,6 @@ pub enum SchedulerState {
 }
 
 impl SchedulerState {
-    #[cfg(not(feature = "test-fixture"))]
     fn from_raw(raw: u32) -> Self {
         match raw {
             SCHEDULER_NOT_STARTED => SchedulerState::NotStarted,
@@ -146,11 +189,137 @@ impl SchedulerState {
 pub fn scheduler_state() -> SchedulerState {
     #[cfg(feature = "test-fixture")]
     {
-        SchedulerState::Running
+        read_scheduler_state_fixture()
     }
     #[cfg(not(feature = "test-fixture"))]
     {
         let raw = unsafe { osal_freertos_scheduler_state() };
         SchedulerState::from_raw(raw)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tick and delay safe wrappers (ADR 0023)
+// ---------------------------------------------------------------------------
+
+/// Capture a coherent tick + overflow count snapshot.
+pub fn tick_snapshot() -> TickSnapshot {
+    #[cfg(feature = "test-fixture")]
+    {
+        read_tick_fixture()
+    }
+    #[cfg(not(feature = "test-fixture"))]
+    {
+        unsafe { osal_freertos_tick_snapshot() }
+    }
+}
+
+/// Request a delay of `ticks` kernel ticks.
+///
+/// Returns a [`DelayStatus`] indicating success or the reason for failure.
+pub fn delay_ticks(ticks: u64) -> DelayStatus {
+    #[cfg(feature = "test-fixture")]
+    {
+        use core::sync::atomic::Ordering;
+        // Fixture: advance virtual tick counter by `ticks`.
+        let current_overflow = TICK_OVERFLOW_FIXTURE.load(Ordering::Relaxed);
+        let current_count = TICK_COUNT_FIXTURE.load(Ordering::Relaxed);
+
+        let new_count = current_count.saturating_add(ticks);
+        let new_overflow = if new_count < current_count {
+            current_overflow.saturating_add(1)
+        } else {
+            current_overflow
+        };
+
+        TICK_COUNT_FIXTURE.store(new_count, Ordering::Relaxed);
+        TICK_OVERFLOW_FIXTURE.store(new_overflow, Ordering::Relaxed);
+        DelayStatus::Ok
+    }
+    #[cfg(not(feature = "test-fixture"))]
+    {
+        let raw = unsafe { osal_freertos_delay_ticks(ticks) };
+        DelayStatus::from_raw(raw)
+    }
+}
+
+/// Return the maximum finite tick count for the platform.
+///
+/// This is `portMAX_DELAY - 1`, reserving the all-ones value as a
+/// "forever" sentinel (ADR 0023 §5).
+pub fn max_finite_delay_ticks() -> u64 {
+    #[cfg(feature = "test-fixture")]
+    {
+        // Fixture: generous 64-bit range.
+        u64::MAX >> 1
+    }
+    #[cfg(not(feature = "test-fixture"))]
+    {
+        unsafe { osal_freertos_max_finite_delay_ticks() }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Fixture state (test-fixture only)
+// ---------------------------------------------------------------------------
+
+// Atomic fields for fixture-controlled tick and scheduler state.
+// Individual atomics avoid dependence on portable-atomic's Atomic<T>.
+
+#[cfg(feature = "test-fixture")]
+static TICK_OVERFLOW_FIXTURE: core::sync::atomic::AtomicU64 =
+    core::sync::atomic::AtomicU64::new(0);
+
+#[cfg(feature = "test-fixture")]
+static TICK_COUNT_FIXTURE: core::sync::atomic::AtomicU64 =
+    core::sync::atomic::AtomicU64::new(0);
+
+#[cfg(feature = "test-fixture")]
+static SCHEDULER_STATE_FIXTURE: core::sync::atomic::AtomicU32 =
+    core::sync::atomic::AtomicU32::new(SCHEDULER_RUNNING);
+
+#[cfg(feature = "test-fixture")]
+fn read_tick_fixture() -> TickSnapshot {
+    TickSnapshot {
+        overflow_count: TICK_OVERFLOW_FIXTURE.load(core::sync::atomic::Ordering::Relaxed),
+        tick_count: TICK_COUNT_FIXTURE.load(core::sync::atomic::Ordering::Relaxed),
+    }
+}
+
+#[cfg(feature = "test-fixture")]
+fn read_scheduler_state_fixture() -> SchedulerState {
+    let raw = SCHEDULER_STATE_FIXTURE.load(core::sync::atomic::Ordering::Relaxed);
+    SchedulerState::from_raw(raw)
+}
+
+/// Fixture control API — enables deterministic contract testing on host CI.
+///
+/// All items are only available behind `#[cfg(feature = "test-fixture")]`.
+#[cfg(feature = "test-fixture")]
+pub mod fixture {
+    use core::sync::atomic::Ordering;
+
+    /// Reset all fixture state to defaults.
+    pub fn reset() {
+        super::TICK_OVERFLOW_FIXTURE.store(0, Ordering::Relaxed);
+        super::TICK_COUNT_FIXTURE.store(0, Ordering::Relaxed);
+        super::SCHEDULER_STATE_FIXTURE.store(super::SCHEDULER_RUNNING, Ordering::Relaxed);
+    }
+
+    /// Set the tick snapshot that `tick_snapshot()` will return.
+    pub fn set_tick_snapshot(overflow_count: u64, tick_count: u64) {
+        super::TICK_OVERFLOW_FIXTURE.store(overflow_count, Ordering::Relaxed);
+        super::TICK_COUNT_FIXTURE.store(tick_count, Ordering::Relaxed);
+    }
+
+    /// Set the scheduler state returned by `scheduler_state()`.
+    pub fn set_scheduler_state(state: super::SchedulerState) {
+        let raw: u32 = match state {
+            super::SchedulerState::NotStarted => super::SCHEDULER_NOT_STARTED,
+            super::SchedulerState::Running => super::SCHEDULER_RUNNING,
+            super::SchedulerState::Suspended => super::SCHEDULER_SUSPENDED,
+            super::SchedulerState::Unknown(v) => v,
+        };
+        super::SCHEDULER_STATE_FIXTURE.store(raw, Ordering::Relaxed);
     }
 }

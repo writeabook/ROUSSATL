@@ -43,10 +43,35 @@ typedef struct {
 osal_freertos_capability_t osal_freertos_probe_capabilities(void);
 
 // ---------------------------------------------------------------------------
+// Tick snapshot — coherent tick + overflow count (ADR 0023 §1)
+// ---------------------------------------------------------------------------
+
+typedef struct {
+    uint64_t overflow_count;
+    uint64_t tick_count;
+} osal_freertos_tick_snapshot_t;
+
+// ---------------------------------------------------------------------------
+// Delay status codes
+// ---------------------------------------------------------------------------
+
+#define OSAL_FREERTOS_DELAY_OK                0u
+#define OSAL_FREERTOS_DELAY_INVALID_TICKS     1u
+#define OSAL_FREERTOS_DELAY_SCHEDULER_STOPPED 2u
+
+// ---------------------------------------------------------------------------
 // Scheduler state query
 // ---------------------------------------------------------------------------
 
 uint32_t osal_freertos_scheduler_state(void);
+
+// ---------------------------------------------------------------------------
+// Tick and delay API (ADR 0023)
+// ---------------------------------------------------------------------------
+
+osal_freertos_tick_snapshot_t osal_freertos_tick_snapshot(void);
+uint32_t osal_freertos_delay_ticks(uint64_t ticks);
+uint64_t osal_freertos_max_finite_delay_ticks(void);
 
 #ifdef __cplusplus
 }

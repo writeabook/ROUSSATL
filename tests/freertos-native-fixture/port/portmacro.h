@@ -16,4 +16,8 @@ typedef uint32_t UBaseType_t;
 #define pdPASS  1
 #define pdFAIL  0
 
+// portMAX_DELAY: max value of TickType_t (~0 cast).
+// For 32-bit TickType_t on the native fixture.
+#define portMAX_DELAY ((TickType_t)0xFFFFFFFFUL)
+
 #endif

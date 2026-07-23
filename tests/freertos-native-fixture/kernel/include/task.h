@@ -12,4 +12,22 @@
 
 BaseType_t xTaskGetSchedulerState(void);
 
+// ---------------------------------------------------------------------------
+// Time-out / delay support (ADR 0023)
+// ---------------------------------------------------------------------------
+
+// Minimal TimeOut_t struct — in real FreeRTOS this holds the tick count
+// and overflow count at the time vTaskSetTimeOutState was called.
+typedef struct {
+    TickType_t xTimeOnEntering;
+    UBaseType_t xOverflowCount;
+} TimeOut_t;
+
+void vTaskSetTimeOutState(TimeOut_t *pxTimeOut);
+void vTaskDelay(TickType_t xTicksToDelay);
+
+// Critical section macros (ADR 0024)
+#define taskENTER_CRITICAL() do { /* raise mask */ } while (0)
+#define taskEXIT_CRITICAL()  do { /* restore mask */ } while (0)
+
 #endif
