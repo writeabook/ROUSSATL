@@ -233,10 +233,17 @@ impl Queue for PosixQueue {
 
         // Wake all blocked senders and receivers.  Once `close()` is
         // committed, wake failures are non-recoverable — they cannot
-        // roll back the close.  Both broadcasts are attempted; either
-        // failing is a fatal backend invariant violation.
-        self.inner.not_empty.wake_all_after_commit();
-        self.inner.not_full.wake_all_after_commit();
+        // roll back the close.  Attempt both broadcasts, then panic
+        // if either failed (so the second is never skipped).
+        let e1 = self.inner.not_empty.broadcast().err();
+        let e2 = self.inner.not_full.broadcast().err();
+        match (e1, e2) {
+            (None, None) => {}
+            (first, second) => panic!(
+                "POSIX queue close broadcast failed after commit: \
+                 not_empty={first:?}, not_full={second:?}"
+            ),
+        }
 
         Ok(())
     }
