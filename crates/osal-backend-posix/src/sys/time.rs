@@ -153,19 +153,3 @@ pub fn checked_abs_deadline(timeout: Duration) -> Result<libc::timespec> {
     Ok(ts)
 }
 
-/// Compute an absolute deadline (legacy compatibility wrapper).
-///
-/// Saturates on overflow instead of returning an error. Prefer
-/// [`checked_abs_deadline`] in new or refactored code.
-pub fn abs_deadline(timeout: Duration) -> libc::timespec {
-    let mut ts = monotonic_now_raw();
-    let sec = timeout.as_secs() as libc::time_t;
-    let nsec = timeout.subsec_nanos() as libc::c_long;
-    ts.tv_sec = ts.tv_sec.saturating_add(sec);
-    ts.tv_nsec += nsec;
-    if ts.tv_nsec >= 1_000_000_000 {
-        ts.tv_sec = ts.tv_sec.saturating_add(1);
-        ts.tv_nsec -= 1_000_000_000;
-    }
-    ts
-}
