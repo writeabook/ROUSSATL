@@ -317,24 +317,11 @@ fn busy_shutdown_leaves_service_running() {
 fn earliest_deadline_dispatched_not_lowest_index() {
     let _rt = TestRuntime::init();
 
-    // Timer A: short period, slow callback — would starve Timer B
-    // under a "first expired" selection strategy.
-    let b_fired = Arc::new(AtomicBool::new(false));
-    let bf = Arc::clone(&b_fired);
-
-    // Create B first so it has a lower index in the Vec.
-    let tb = PosixTimer::new(
-        "b",
-        Duration::from_millis(20),
-        TimerMode::OneShot,
-        Box::new(move || {
-            bf.store(true, Ordering::SeqCst);
-        }),
-    )
-    .unwrap();
-    tb.start().unwrap();
-
-    // Create A second — it will be at a higher index.
+    // Timer A: short period, slow callback.  Created FIRST so it
+    // occupies index 0.  With a "first expired" scan, A would be
+    // selected every iteration (its deadline is always ≤ now) and
+    // Timer B at index 1 would starve.  Earliest-deadline dispatch
+    // ensures B fires once its older deadline is recognised.
     let a_ticks = Arc::new(AtomicU32::new(0));
     let at = Arc::clone(&a_ticks);
     let ta = PosixTimer::new(
@@ -349,6 +336,21 @@ fn earliest_deadline_dispatched_not_lowest_index() {
     )
     .unwrap();
     ta.start().unwrap();
+
+    // Create B second — higher index.  Under first-expired dispatch
+    // the worker would never reach it while A is repeatedly expired.
+    let b_fired = Arc::new(AtomicBool::new(false));
+    let bf = Arc::clone(&b_fired);
+    let tb = PosixTimer::new(
+        "b",
+        Duration::from_millis(20),
+        TimerMode::OneShot,
+        Box::new(move || {
+            bf.store(true, Ordering::SeqCst);
+        }),
+    )
+    .unwrap();
+    tb.start().unwrap();
 
     // Wait long enough for B's deadline (20 ms) to pass while A is
     // repeatedly firing.  A fires at t≈1 ms and blocks for 30 ms;
