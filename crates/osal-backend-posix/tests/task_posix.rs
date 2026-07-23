@@ -368,7 +368,9 @@ fn self_join_returns_busy() {
     // Give the task its own handle.
     *handle_slot.lock().unwrap() = Some(task.clone());
 
-    // Wait for the child to complete its self-join attempt.
+    // Wait for the child to complete its self-join attempt,
+    // with a deadline to prevent CI hang on regression.
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
     loop {
         let guard = result.lock().unwrap();
         if let Some(ref r) = *guard {
@@ -376,6 +378,10 @@ fn self_join_returns_busy() {
             break;
         }
         drop(guard);
+        assert!(
+            std::time::Instant::now() < deadline,
+            "self-join test timed out — possible deadlock regression"
+        );
         thread::sleep(Duration::from_millis(1));
     }
 

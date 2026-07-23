@@ -159,6 +159,15 @@ mod tests {
     }
 
     #[test]
+    fn periodic_large_but_valid_duration() {
+        // Period of > u64::MAX nanos but within valid Duration range.
+        let period = Duration::new(u64::MAX / 2 + 1, 0);
+        let result =
+            next_periodic_deadline(Duration::ZERO, period, Duration::ZERO).unwrap();
+        assert_eq!(result, period);
+    }
+
+    #[test]
     fn periodic_overflow_on_advance() {
         // Genuine overflow: deadline is near u64::MAX seconds, and
         // the next period would exceed Duration::MAX.
