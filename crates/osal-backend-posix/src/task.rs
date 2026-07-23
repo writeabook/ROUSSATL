@@ -301,15 +301,11 @@ impl PosixTask {
         // Self-join guard: a task joining itself would deadlock
         // forever (it waits for itself to reach Finished, which it
         // never will while blocking in join).
-        // Guard using the stored pthread handle; if the handle is
-        // None the thread is already joined, and self-join is moot.
-        {
-            let thread = unsafe { &*self.inner.thread.get() };
-            if let Some(ref t) = *thread {
-                if t.is_current() {
-                    return Err(Error::Busy);
-                }
-            }
+        // Uses TLS current-task identity rather than the stored
+        // pthread handle — avoids a data race on UnsafeCell under
+        // concurrent join.
+        if PosixTask::current() == Some(self.handle()) {
+            return Err(Error::Busy);
         }
 
         match timeout {
@@ -329,7 +325,7 @@ impl PosixTask {
                 }
             }
             Timeout::After(d) => {
-                let deadline = condvar::abs_deadline(d);
+                let deadline = condvar::abs_deadline(d)?;
                 let mut guard = self.inner.mutex.lock_guard().unwrap();
 
                 loop {

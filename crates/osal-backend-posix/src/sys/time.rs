@@ -69,30 +69,53 @@ pub fn monotonic_now() -> Duration {
 // Sleep
 // ---------------------------------------------------------------------------
 
+/// Maximum seconds representable in `time_t` for nanosleep.
+#[cfg(target_pointer_width = "64")]
+const MAX_SLEEP_SECS: i64 = libc::time_t::MAX;
+
+#[cfg(not(target_pointer_width = "64"))]
+const MAX_SLEEP_SECS: i64 = i32::MAX as libc::time_t;
+
 /// Sleep for at least `d` using `nanosleep`.
 ///
 /// Restarts on `EINTR` (signal interruption) using the remaining time
 /// reported by the kernel. Uses `CLOCK_MONOTONIC` so it is unaffected
-/// by wall-clock changes. Non-EINTR errors that should never occur
-/// with valid input (EINVAL, EFAULT) are silently ignored and the
-/// function returns immediately.
+/// by wall-clock changes.
+///
+/// Splits durations that exceed `time_t` range into multiple segments,
+/// honouring the contract that `delay(d)` sleeps for at least `d`.
 pub fn nanosleep(d: Duration) {
-    let mut remaining = match duration_to_timespec(d) {
-        Ok(ts) => ts,
-        Err(_) => return, // overflow: cannot sleep, return immediately
-    };
+    let mut remaining = d;
     loop {
-        let mut rem: libc::timespec = unsafe { core::mem::zeroed() };
-        let ret = unsafe { libc::nanosleep(&remaining, &mut rem) };
-        if ret == 0 {
+        if remaining.is_zero() {
             return;
         }
-        if errno() == libc::EINTR {
-            remaining = rem;
-            continue;
+        // Cap each segment to fit in time_t, but take at least one
+        // segment even if the cap rounds to zero.
+        let seg_secs = remaining.as_secs().min(MAX_SLEEP_SECS as u64);
+        let seg = Duration::new(seg_secs, remaining.subsec_nanos());
+
+        let ts = match duration_to_timespec(seg) {
+            Ok(ts) => ts,
+            Err(_) => return, // should not happen with capped value
+        };
+
+        let mut req = ts;
+        loop {
+            let mut rem: libc::timespec = unsafe { core::mem::zeroed() };
+            let ret = unsafe { libc::nanosleep(&req, &mut rem) };
+            if ret == 0 {
+                break;
+            }
+            if errno() == libc::EINTR {
+                req = rem;
+                continue;
+            }
+            // Other errors (EINVAL, EFAULT) — should not happen.
+            return;
         }
-        // Other errors (EINVAL, EFAULT) — should not happen with valid input.
-        return;
+
+        remaining = remaining.saturating_sub(seg);
     }
 }
 

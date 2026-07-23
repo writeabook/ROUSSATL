@@ -117,7 +117,7 @@ impl Queue for PosixQueue {
                 result
             }
             Timeout::After(d) => {
-                let deadline = condvar::abs_deadline(d);
+                let deadline = condvar::abs_deadline(d)?;
                 loop {
                     if self.buffer_locked(&guard).is_closed() {
                         return Err(Error::QueueClosed);
@@ -170,7 +170,7 @@ impl Queue for PosixQueue {
                 result
             }
             Timeout::After(d) => {
-                let deadline = condvar::abs_deadline(d);
+                let deadline = condvar::abs_deadline(d)?;
                 loop {
                     let is_closed = self.buffer_locked(&guard).is_closed();
                     let is_empty = self.buffer_locked(&guard).is_empty();

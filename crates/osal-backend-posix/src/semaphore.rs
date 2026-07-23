@@ -102,7 +102,7 @@ impl CountingSemaphore for PosixCountingSemaphore {
             Timeout::NoWait => Err(Error::Timeout),
             Timeout::After(d) if d == Duration::ZERO => Err(Error::Timeout),
             Timeout::After(d) => {
-                let deadline = condvar::abs_deadline(d);
+                let deadline = condvar::abs_deadline(d)?;
                 loop {
                     if self.with_state_locked(&guard, |state| state.try_acquire()) {
                         return Ok(());

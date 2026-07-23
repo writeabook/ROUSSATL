@@ -122,4 +122,4 @@ unsafe impl Sync for PosixCondvar {}
 // Deadline helper — re-exported from sys::time
 // ---------------------------------------------------------------------------
 
-pub use crate::sys::time::abs_deadline;
+pub use crate::sys::time::checked_abs_deadline as abs_deadline;

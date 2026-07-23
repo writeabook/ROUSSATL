@@ -114,7 +114,10 @@ impl TimerService {
                 }
                 Some(deadline) => {
                     let timeout = deadline.saturating_sub(now);
-                    let abs = time::abs_deadline(timeout);
+                    let abs = match time::checked_abs_deadline(timeout) {
+                        Ok(a) => a,
+                        Err(_) => continue, // overflow: re-scan
+                    };
                     match self.condvar.timed_wait(&mut guard, &abs) {
                         Ok(()) | Err(Error::Timeout) => {}
                         Err(e) => panic!("timer worker timed wait failed: {e:?}"),
