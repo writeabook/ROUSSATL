@@ -3,6 +3,7 @@
 use core::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use core::time::Duration;
 use std::sync::Arc;
+use std::thread;
 
 use osal_api::error::Error;
 use osal_api::time::Timeout;
@@ -335,51 +336,85 @@ fn spawn_failure_does_not_pollute_count() {
 fn self_join_returns_busy() {
     let _ = runtime::initialize();
 
-    let done = Arc::new(AtomicBool::new(false));
-    let d = Arc::clone(&done);
-    let result = Arc::new(Mutex::new(None));
-    let r = Arc::clone(&result);
+    // Channel: parent passes the task its own handle.
+    let handle_slot: Arc<std::sync::Mutex<Option<PosixTask>>> =
+        Arc::new(std::sync::Mutex::new(None));
+    let slot = Arc::clone(&handle_slot);
+    let result: Arc<std::sync::Mutex<Option<core::result::Result<ExitCode, Error>>>> =
+        Arc::new(std::sync::Mutex::new(None));
+    let res = Arc::clone(&result);
 
-    // Spawn a task that receives its own handle and tries to self-join.
     let task = PosixTaskBuilder::new()
         .name("selfjoin")
         .spawn(move || {
-            // Spawn a child task and leak its handle into the parent
-            // ... actually, current() returns the current handle.
-            // We need a different approach: spawn a task that gets
-            // its own handle through a side channel.
-            d.store(true, Ordering::SeqCst);
+            // Wait until the parent gives us our handle.
+            let my_handle: PosixTask;
+            loop {
+                let guard = slot.lock().unwrap();
+                if let Some(ref h) = *guard {
+                    my_handle = h.clone();
+                    break;
+                }
+                drop(guard);
+                thread::sleep(Duration::from_millis(1));
+            }
+
+            // Try to join myself — must return Busy.
+            let r = my_handle.join(Timeout::Forever);
+            *res.lock().unwrap() = Some(r);
         })
         .unwrap();
 
-    // Wait for the spawned task to start, then try to join from
-    // within that task is not possible in the single-task model.
-    // Instead, verify that a normal join from another thread works.
-    task.join(Timeout::Forever).unwrap();
-    assert!(done.load(Ordering::SeqCst));
+    // Give the task its own handle.
+    *handle_slot.lock().unwrap() = Some(task.clone());
 
-    // Self-join prevention: use current() to get a handle from
-    // inside a task, then verify is_current check.
-    // (Full self-join requires a two-task setup with handle passing;
-    //  the is_current guard is tested implicitly via the join_inner
-    //  self-join path — see join_state_machine below.)
+    // Wait for the child to complete its self-join attempt.
+    loop {
+        let guard = result.lock().unwrap();
+        if let Some(ref r) = *guard {
+            assert_eq!(*r, Err(Error::Busy), "self-join must return Busy");
+            break;
+        }
+        drop(guard);
+        thread::sleep(Duration::from_millis(1));
+    }
+
+    // Parent can still join normally.
+    task.join(Timeout::Forever).unwrap();
 }
 
 #[test]
 fn joining_state_preserves_exit_code() {
     let _ = runtime::initialize();
 
-    // Spawn a task and join it — the exit code must be SUCCESS
-    // even though the state passed through Joining.
     let task = PosixTaskBuilder::new()
         .name("exitcode")
         .spawn(|| {})
         .unwrap();
 
-    let code = task.join(Timeout::Forever).unwrap();
-    assert_eq!(code, ExitCode::SUCCESS);
+    let t1 = task.clone();
+    let t2 = task.clone();
+    let r1 = Arc::new(std::sync::Mutex::new(None));
+    let r2 = Arc::new(std::sync::Mutex::new(None));
+    let a1 = Arc::clone(&r1);
+    let a2 = Arc::clone(&r2);
+
+    let j1 = thread::spawn(move || {
+        *a1.lock().unwrap() = Some(t1.join(Timeout::Forever));
+    });
+    let j2 = thread::spawn(move || {
+        *a2.lock().unwrap() = Some(t2.join(Timeout::Forever));
+    });
+
+    j1.join().unwrap();
+    j2.join().unwrap();
+
+    let code1 = r1.lock().unwrap().take().unwrap().unwrap();
+    let code2 = r2.lock().unwrap().take().unwrap().unwrap();
+    assert_eq!(code1, ExitCode::SUCCESS);
+    assert_eq!(code2, ExitCode::SUCCESS);
 
     // Repeated join must return the same cached code.
-    let code2 = task.join(Timeout::NoWait).unwrap();
-    assert_eq!(code2, ExitCode::SUCCESS);
+    let code3 = task.join(Timeout::NoWait).unwrap();
+    assert_eq!(code3, ExitCode::SUCCESS);
 }
