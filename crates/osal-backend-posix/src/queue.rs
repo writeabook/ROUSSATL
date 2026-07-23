@@ -231,11 +231,16 @@ impl Queue for PosixQueue {
 
         buffer.close();
 
-        // Wake all blocked senders and receivers. If these fail the state
-        // has already been committed — the queue is closed regardless.
-        // We propagate the error for visibility.
-        self.inner.not_empty.broadcast()?;
-        self.inner.not_full.broadcast()?;
+        // Wake all blocked senders and receivers.  Once `close()` is
+        // committed, wake failures are non-recoverable — they cannot
+        // roll back the close.  We attempt both broadcasts regardless
+        // of whether the first succeeds, and return the last error (if
+        // any) for diagnostics.
+        let e1 = self.inner.not_empty.broadcast().err();
+        let e2 = self.inner.not_full.broadcast().err();
+        if let Some(e) = e2.or(e1) {
+            return Err(e);
+        }
 
         Ok(())
     }
