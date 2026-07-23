@@ -36,6 +36,8 @@ pub fn next_periodic_deadline(
     period: Duration,
     now: Duration,
 ) -> Result<Duration> {
+    const NANOS_PER_SEC: u128 = 1_000_000_000;
+
     // Guard: period must be non-zero (validated by caller).
     if period.is_zero() {
         return Err(Error::InvalidParameter);
@@ -61,7 +63,12 @@ pub fn next_periodic_deadline(
         .ok_or(Error::Overflow)?;
 
     let advance_ns = period_ns.checked_mul(missed).ok_or(Error::Overflow)?;
-    let advance = Duration::from_nanos(u64::try_from(advance_ns).map_err(|_| Error::Overflow)?);
+
+    // Convert u128 nanos to Duration (u64 secs + u32 nanos).
+    let advance_secs = advance_ns / NANOS_PER_SEC;
+    let advance_subsec = (advance_ns % NANOS_PER_SEC) as u32;
+    let advance_secs_u64 = u64::try_from(advance_secs).map_err(|_| Error::Overflow)?;
+    let advance = Duration::new(advance_secs_u64, advance_subsec);
 
     previous_deadline
         .checked_add(advance)
@@ -153,11 +160,11 @@ mod tests {
 
     #[test]
     fn periodic_overflow_on_advance() {
-        // Near the u64 limit with a large period — overflow in
-        // checked arithmetic.
-        let deadline = Duration::new(u64::MAX / 2, 0);
-        let period = Duration::new(u64::MAX / 2 + 1, 0);
-        let now = Duration::new(u64::MAX / 2 + 100, 0);
+        // Genuine overflow: deadline is near u64::MAX seconds, and
+        // the next period would exceed Duration::MAX.
+        let deadline = Duration::new(u64::MAX - 1, 0);
+        let period = Duration::from_secs(2);
+        let now = deadline; // exactly at deadline — next must be after now
         let result = next_periodic_deadline(deadline, period, now);
         assert_eq!(result, Err(Error::Overflow));
     }
