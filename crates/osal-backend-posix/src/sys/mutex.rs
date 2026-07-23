@@ -97,23 +97,12 @@ impl PosixMutex {
     /// `pthread_mutex_timedlock` clock behavior.
     ///
     /// Returns `Error::Timeout` if the deadline expires before
-    /// the lock is acquired.
+    /// the lock is acquired. Returns `Error::Overflow` if the
+    /// timeout would overflow the platform time representation.
     pub fn timed_lock(&self, timeout: Duration) -> Result<()> {
         use crate::sys::time;
 
-        let deadline = time::monotonic_now_raw();
-        // Compute absolute deadline.
-        let deadline = libc::timespec {
-            tv_sec: deadline
-                .tv_sec
-                .saturating_add(timeout.as_secs() as libc::time_t),
-            tv_nsec: deadline.tv_nsec + timeout.subsec_nanos() as libc::c_long,
-        };
-        // Normalize nsec carry-over.
-        let deadline = libc::timespec {
-            tv_sec: deadline.tv_sec + deadline.tv_nsec / 1_000_000_000,
-            tv_nsec: deadline.tv_nsec % 1_000_000_000,
-        };
+        let deadline = time::checked_abs_deadline(timeout)?;
 
         loop {
             match self.try_lock() {
