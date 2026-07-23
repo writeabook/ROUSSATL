@@ -63,3 +63,32 @@ OSAL uses **strong typed handles** for all Rust public APIs.
   by the shared ownership model, not by numeric ID comparison.
 - If C ABI is needed in the future, a separate `osal-ffi` crate can
   provide numeric ID wrappers around the typed handles.
+
+### Handle thread-safety contract (P6D clarification)
+
+| Backend | Internal storage | `Send` | `Sync` | Intended use |
+|---------|-----------------|--------|--------|-------------|
+| POSIX   | `Arc<Inner>`    | Yes    | Yes    | Multi-threaded, real pthreads |
+| Mock    | `Rc<RefCell<Inner>>` or `Rc<Inner>` | No | No | Single-threaded, deterministic tests |
+| FreeRTOS (future) | TBD | TBD | TBD | Multi-task, RTOS primitives |
+
+This is an intentional design decision:
+
+- POSIX handles use `Arc` and are fully `Send + Sync + 'static`.
+  They can be shared across threads, sent to spawned tasks, and
+  stored in global state — matching the expectations of a
+  multi-threaded host platform.
+- Mock handles use `Rc` and are intentionally NOT `Send + Sync`.
+  The Mock backend is a single-threaded deterministic test harness.
+  Cross-thread mock tests would deadlock on `RefCell` panics; this
+  is a feature, not a bug — it catches incorrect concurrency
+  assumptions in test code at compile time.
+- The `osal-api` trait layer does NOT require `Send + Sync` as
+  supertrait bounds. This keeps Mock implementable. Generic
+  application code that needs thread-safety should either target
+  the POSIX backend specifically, or accept the `Send + Sync`
+  bounds implied by the concrete types resolved through the facade.
+- FreeRTOS will need its own decision. If FreeRTOS tasks share an
+  address space but use RTOS primitives (mutex, queue) for
+  synchronisation, `Send` without `Sync` may be appropriate.
+  This is deferred to the FreeRTOS backend slice.
