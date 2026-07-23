@@ -17,6 +17,7 @@
 //! `--features test-fixture` skips the build script entirely and
 //! uses stub capability data (no FreeRTOS kernel required).
 
+#[cfg(not(feature = "test-fixture"))]
 use std::env;
 
 fn main() {

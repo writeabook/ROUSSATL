@@ -59,12 +59,12 @@ jobs:
       - name: FreeRTOS backend skeleton compiles (fixture)
         run: cargo check -p osal-backend-freertos --features test-fixture
 
-      - name: FreeRTOS native C shim smoke build
+      - name: FreeRTOS native facade smoke build
         env:
-          ROUSSATL_FREERTOS_KERNEL_INCLUDE: tests/freertos-native-fixture/kernel/include
-          ROUSSATL_FREERTOS_CONFIG_INCLUDE: tests/freertos-native-fixture/config
-          ROUSSATL_FREERTOS_PORT_INCLUDE: tests/freertos-native-fixture/port
-        run: cargo check -p osal-backend-freertos-sys
+          ROUSSATL_FREERTOS_KERNEL_INCLUDE: ${{ github.workspace }}/tests/freertos-native-fixture/kernel/include
+          ROUSSATL_FREERTOS_CONFIG_INCLUDE: ${{ github.workspace }}/tests/freertos-native-fixture/config
+          ROUSSATL_FREERTOS_PORT_INCLUDE: ${{ github.workspace }}/tests/freertos-native-fixture/port
+        run: cargo check -p osal --no-default-features --features backend-freertos
 
       - name: No backend must fail
         run: |

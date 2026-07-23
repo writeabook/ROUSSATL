@@ -58,9 +58,10 @@ pub const SCHEDULER_RUNNING: u32 = 1;
 pub const SCHEDULER_SUSPENDED: u32 = 2;
 
 // ---------------------------------------------------------------------------
-// FFI declarations
+// FFI declarations (native path only — fixture uses Rust stubs)
 // ---------------------------------------------------------------------------
 
+#[cfg(not(feature = "test-fixture"))]
 unsafe extern "C" {
     fn osal_freertos_probe_capabilities() -> KernelCapabilities;
     fn osal_freertos_scheduler_state() -> u32;
@@ -130,6 +131,7 @@ pub enum SchedulerState {
 }
 
 impl SchedulerState {
+    #[cfg(not(feature = "test-fixture"))]
     fn from_raw(raw: u32) -> Self {
         match raw {
             SCHEDULER_NOT_STARTED => SchedulerState::NotStarted,
