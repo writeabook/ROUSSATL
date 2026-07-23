@@ -141,8 +141,8 @@ enum JoinState {
     Running,
     /// Task thread exited with this code; `pthread_join` not yet called.
     Finished(ExitCode),
-    /// One caller is inside `pthread_join`; others wait.
-    Joining,
+    /// One caller is inside `pthread_join` with this exit code; others wait.
+    Joining(ExitCode),
     /// `pthread_join` completed; exit code is cached.
     Joined(ExitCode),
 }
@@ -298,6 +298,20 @@ pub struct PosixTask {
 impl PosixTask {
     /// Execute the join state machine (see module-level doc).
     fn join_inner(&self, timeout: Timeout) -> Result<ExitCode> {
+        // Self-join guard: a task joining itself would deadlock
+        // forever (it waits for itself to reach Finished, which it
+        // never will while blocking in join).
+        // Guard using the stored pthread handle; if the handle is
+        // None the thread is already joined, and self-join is moot.
+        {
+            let thread = unsafe { &*self.inner.thread.get() };
+            if let Some(ref t) = *thread {
+                if t.is_current() {
+                    return Err(Error::Busy);
+                }
+            }
+        }
+
         match timeout {
             Timeout::NoWait => {
                 // NoWait must never block.  Joined → cached code;
@@ -321,11 +335,12 @@ impl PosixTask {
                 loop {
                     let done = self.inner.with_state_locked(&guard, |s| match s {
                         JoinState::Joined(code) => Some(Ok(*code)),
-                        JoinState::Finished(_code) => {
-                            *s = JoinState::Joining;
+                        JoinState::Finished(code) => {
+                            let c = *code;
+                            *s = JoinState::Joining(c);
                             Some(Err(()))
                         }
-                        JoinState::Joining => None,
+                        JoinState::Joining(_) => None,
                         JoinState::Running => None,
                     });
 
@@ -349,11 +364,12 @@ impl PosixTask {
                 loop {
                     let done = self.inner.with_state_locked(&guard, |s| match s {
                         JoinState::Joined(code) => Some(Ok(*code)),
-                        JoinState::Finished(_code) => {
-                            *s = JoinState::Joining;
+                        JoinState::Finished(code) => {
+                            let c = *code;
+                            *s = JoinState::Joining(c);
                             Some(Err(()))
                         }
-                        JoinState::Joining => None,
+                        JoinState::Joining(_) => None,
                         JoinState::Running => None,
                     });
 
@@ -397,7 +413,7 @@ impl PosixTask {
                 let code = self.inner.with_state_locked(&guard, |s| {
                     let code = match s {
                         JoinState::Finished(c) => *c,
-                        JoinState::Joining => ExitCode::SUCCESS,
+                        JoinState::Joining(c) => *c,
                         JoinState::Joined(c) => *c,
                         JoinState::Running => ExitCode::SUCCESS,
                     };
@@ -413,7 +429,7 @@ impl PosixTask {
                 let _code = self.inner.with_state_locked(&guard, |s| {
                     let code = match s {
                         JoinState::Finished(c) => *c,
-                        JoinState::Joining => ExitCode::SUCCESS,
+                        JoinState::Joining(c) => *c,
                         JoinState::Joined(c) => *c,
                         _ => ExitCode::SUCCESS,
                     };
