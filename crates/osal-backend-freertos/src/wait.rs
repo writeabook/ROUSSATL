@@ -78,10 +78,31 @@ pub fn wait_native(
                     }
                 }
             } else {
+                ensure_blocking_allowed()?;
                 wait_absolute_deadline(d, take)
             }
         }
-        Timeout::Forever => wait_forever(take),
+        Timeout::Forever => {
+            ensure_blocking_allowed()?;
+            wait_forever(take)
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Scheduler-state precondition (ADR 0025 §4)
+// ---------------------------------------------------------------------------
+
+/// Check that the scheduler is in a state that permits blocking.
+///
+/// `NoWait` and `After(Duration::ZERO)` do NOT call this — they are
+/// non-blocking operations that work regardless of scheduler state.
+fn ensure_blocking_allowed() -> Result<()> {
+    match sys::scheduler_state() {
+        sys::SchedulerState::Running => Ok(()),
+        sys::SchedulerState::NotStarted => Err(Error::NotInitialized),
+        sys::SchedulerState::Suspended => Err(Error::Busy),
+        sys::SchedulerState::Unknown(_) => Err(Error::Internal("unknown FreeRTOS scheduler state")),
     }
 }
 

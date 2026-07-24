@@ -69,9 +69,9 @@ Public APIs may change before version 1.0.
 | Queue Core        | Validated | Validated   | Validated   | Planned    | Validated   | Validated |
 | Queue Blocking    | Validated | Deferred    | Validated   | Planned    | Validated¹  | Validated |
 | Queue ISR         | Deferred  | N/A         | N/A         | Deferred   | Deferred    | Deferred  |
-| Mutex             | Validated | Validated   | Validated   | Validated  | Validated   | Validated |
-| CountingSemaphore | Validated | Validated   | Validated   | Validated  | Validated   | Validated |
-| BinarySemaphore   | Validated | Validated   | Validated   | Validated  | Validated   | Validated |
+| Mutex             | Validated | Validated   | Validated   | Implemented| Validated   | Validated |
+| CountingSemaphore | Validated | Validated   | Validated   | Implemented| Validated   | Validated |
+| BinarySemaphore   | Validated | Validated   | Validated   | Implemented| Validated   | Validated |
 | Semaphore ISR     | Deferred  | N/A         | N/A         | Deferred   | Deferred    | Deferred  |
 | Clock             | Validated | Validated   | Validated   | Implemented| Validated   | Validated |
 | Timer             | Validated | Validated   | Validated   | Planned    | Validated   | Validated |

@@ -1,9 +1,9 @@
 //! Semaphore contract tests for FreeRTOS backend (fixture).
 //!
 //! Uses the host sync fixture to simulate semaphore operations.  The
-//! fixture provides real waiter/wake-one behaviour via `std::sync::Mutex`
-//! + `Condvar`, so the contract tests exercise the full blocking and
-//! timeout paths.
+//! fixture provides real waiter/wake-one behaviour via
+//! `std::sync::Mutex` + `Condvar`, so the contract tests exercise
+//! the full blocking and timeout paths.
 //!
 //! ```bash
 //! cargo test -p osal-backend-freertos --features testkit semaphore_contract -- --test-threads=1

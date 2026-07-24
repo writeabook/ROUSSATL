@@ -18,6 +18,36 @@ use std::vec::Vec;
 use super::{GiveStatus, MutexHandle, SemaphoreHandle, TakeStatus};
 
 // ---------------------------------------------------------------------------
+// Virtual tick advance — keeps the fixture clock in sync with timed waits.
+// ---------------------------------------------------------------------------
+
+/// Advance the fixture's virtual tick counter by `ticks`, respecting
+/// the configured tick width (modulo wrap).
+fn advance_virtual_ticks(ticks: u64) {
+    use super::{TICK_BITS_FIXTURE, TICK_COUNT_FIXTURE, TICK_OVERFLOW_FIXTURE};
+    use core::sync::atomic::Ordering;
+
+    let bits = TICK_BITS_FIXTURE.load(Ordering::Relaxed);
+    let modulus: u128 = 1u128 << (bits as u32);
+
+    let current_overflow = TICK_OVERFLOW_FIXTURE.load(Ordering::Relaxed);
+    let current_count = TICK_COUNT_FIXTURE.load(Ordering::Relaxed);
+
+    let total: u128 = (current_count as u128)
+        .checked_add(ticks as u128)
+        .expect("fixture tick overflowed u128");
+
+    let wrap_count = total / modulus;
+    let new_count = (total % modulus) as u64;
+    let new_overflow = current_overflow
+        .checked_add(wrap_count as u64)
+        .expect("fixture overflow count overflowed u64");
+
+    TICK_COUNT_FIXTURE.store(new_count, Ordering::Relaxed);
+    TICK_OVERFLOW_FIXTURE.store(new_overflow, Ordering::Relaxed);
+}
+
+// ---------------------------------------------------------------------------
 // Global fixture state
 // ---------------------------------------------------------------------------
 
@@ -33,7 +63,6 @@ struct FixtureSemaphoreEntry {
     deleted: bool,
 }
 
-#[derive(Default)]
 struct FixtureState {
     mutexes: HashMap<usize, FixtureMutexEntry>,
     semaphores: HashMap<usize, FixtureSemaphoreEntry>,
@@ -44,6 +73,22 @@ struct FixtureState {
     sem_delete_count: usize,
     take_call_ticks: Vec<u64>,
     give_call_count: usize,
+}
+
+impl Default for FixtureState {
+    fn default() -> Self {
+        Self {
+            mutexes: HashMap::new(),
+            semaphores: HashMap::new(),
+            next_id: 1, // nonzero — opaque handles must not be null
+            mutex_create_count: 0,
+            mutex_delete_count: 0,
+            sem_create_count: 0,
+            sem_delete_count: 0,
+            take_call_ticks: Vec::new(),
+            give_call_count: 0,
+        }
+    }
 }
 
 static FIXTURE: LazyLock<(Mutex<FixtureState>, Condvar)> =
@@ -126,12 +171,20 @@ pub fn mutex_take(handle: &MutexHandle, ticks: u64) -> TakeStatus {
 
         if entry.owner == Some(current_thread) {
             // Non-recursive: same thread re-lock fails immediately.
+            // Advance ticks so the wait engine's deadline loop terminates.
+            if ticks > 0 {
+                advance_virtual_ticks(ticks);
+            }
             return TakeStatus::Timeout;
         }
 
         if ticks == 0 {
             return TakeStatus::Timeout;
         }
+
+        // From this point on, ticks > 0. All Timeout returns must
+        // advance virtual ticks so the wait engine's deadline loop
+        // sees time progress and eventually terminates.
 
         // Determine wait duration for this attempt.
         let wait_ticks = ticks.min(max_finite);
@@ -148,11 +201,14 @@ pub fn mutex_take(handle: &MutexHandle, ticks: u64) -> TakeStatus {
             if !entry.locked {
                 entry.locked = true;
                 entry.owner = Some(current_thread);
+                advance_virtual_ticks(wait_ticks);
                 return TakeStatus::Acquired;
             }
+            advance_virtual_ticks(wait_ticks);
             return TakeStatus::Timeout;
         }
-        // Spurious wakeup — re-loop.
+        // Spurious wakeup — advance ticks and re-loop.
+        advance_virtual_ticks(wait_ticks);
     }
 }
 
@@ -270,10 +326,14 @@ pub fn semaphore_take(handle: &SemaphoreHandle, ticks: u64) -> TakeStatus {
             let entry = state.semaphores.get_mut(&id).unwrap();
             if entry.count > 0 {
                 entry.count -= 1;
+                advance_virtual_ticks(wait_ticks);
                 return TakeStatus::Acquired;
             }
+            advance_virtual_ticks(wait_ticks);
             return TakeStatus::Timeout;
         }
+        // Spurious wakeup — advance ticks and re-loop.
+        advance_virtual_ticks(wait_ticks);
     }
 }
 
