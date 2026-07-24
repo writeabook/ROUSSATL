@@ -21,6 +21,7 @@
 
 use alloc::rc::Rc;
 use alloc::sync::Arc;
+use core::fmt;
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
 
@@ -69,6 +70,12 @@ pub struct FreeRtosMutex<T> {
     inner: Arc<MutexInner<T>>,
 }
 
+impl<T: fmt::Debug> fmt::Debug for FreeRtosMutex<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FreeRtosMutex").finish()
+    }
+}
+
 impl<T> Clone for FreeRtosMutex<T> {
     fn clone(&self) -> Self {
         Self {
@@ -113,6 +120,12 @@ pub struct FreeRtosMutexGuard<'a, T> {
     native: &'a sys::MutexHandle,
     value_guard: Option<spin::MutexGuard<'a, T>>,
     _not_send: PhantomData<Rc<()>>,
+}
+
+impl<T: fmt::Debug> fmt::Debug for FreeRtosMutexGuard<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FreeRtosMutexGuard").finish()
+    }
 }
 
 impl<T> Deref for FreeRtosMutexGuard<'_, T> {
