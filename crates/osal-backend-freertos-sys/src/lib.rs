@@ -774,4 +774,12 @@ pub mod fixture {
     pub fn give_call_count() -> usize {
         super::fixture_sync::sync_give_call_count()
     }
+
+    /// Number of threads currently inside a Condvar wait.
+    ///
+    /// Use for test synchronization: poll until this reaches the
+    /// expected value before performing a release/guard-drop.
+    pub fn waiter_count() -> u64 {
+        super::fixture_sync::WAITER_COUNT.load(Ordering::Relaxed)
+    }
 }

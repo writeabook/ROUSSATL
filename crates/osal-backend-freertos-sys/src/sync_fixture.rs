@@ -99,6 +99,8 @@ static FIXTURE: LazyLock<(Mutex<FixtureState>, Condvar)> =
 static MAX_FINITE_WAIT_TICKS: AtomicU64 = AtomicU64::new((1u64 << 32) - 2);
 static FAIL_NEXT_MUTEX_CREATE: AtomicBool = AtomicBool::new(false);
 static FAIL_NEXT_SEM_CREATE: AtomicBool = AtomicBool::new(false);
+/// Count of threads currently inside a Condvar wait.
+pub(super) static WAITER_COUNT: AtomicU64 = AtomicU64::new(0);
 
 // ---------------------------------------------------------------------------
 // Handle tagging
@@ -194,16 +196,16 @@ pub fn mutex_take(handle: &MutexHandle, ticks: u64) -> TakeStatus {
 
         // Track waiters so tests can verify blocking.
         entry.waiters += 1;
+        WAITER_COUNT.fetch_add(1, Ordering::Relaxed);
 
         // Wait with timeout.
         let timeout = Duration::from_micros((wait_ticks as u128 * 1_000_000 / 1000) as u64);
 
-        // Drop the lock before we know the result — waiters is already
-        // recorded, and the Condvar takes ownership of `state`.
         let (_state, wait_result) = cvar.wait_timeout(state, timeout).unwrap();
         state = _state;
 
         // Decrement waiters before any other action.
+        WAITER_COUNT.fetch_sub(1, Ordering::Relaxed);
         let entry = state.mutexes.get_mut(&id).unwrap();
         entry.waiters = entry.waiters.saturating_sub(1);
 
@@ -334,11 +336,13 @@ pub fn semaphore_take(handle: &SemaphoreHandle, ticks: u64) -> TakeStatus {
 
         // Track waiters so tests can verify blocking.
         entry.waiters += 1;
+        WAITER_COUNT.fetch_add(1, Ordering::Relaxed);
 
         let (_state, wait_result) = cvar.wait_timeout(state, timeout).unwrap();
         state = _state;
 
         // Decrement waiters before any other action.
+        WAITER_COUNT.fetch_sub(1, Ordering::Relaxed);
         let entry = state.semaphores.get_mut(&id).unwrap();
         entry.waiters = entry.waiters.saturating_sub(1);
 
@@ -415,6 +419,10 @@ pub fn sync_reset() {
     state.sem_delete_count = 0;
     state.take_call_ticks.clear();
     state.give_call_count = 0;
+
+    // Reset the global waiter counter (other fixture atomics are reset
+    // by their respective fixture::reset() calls).
+    WAITER_COUNT.store(0, Ordering::Relaxed);
 }
 
 pub fn sync_set_fail_next_mutex_create(fail: bool) {
