@@ -55,12 +55,14 @@ struct FixtureMutexEntry {
     locked: bool,
     owner: Option<ThreadId>,
     deleted: bool,
+    waiters: usize,
 }
 
 struct FixtureSemaphoreEntry {
     count: u32,
     max_count: u32,
     deleted: bool,
+    waiters: usize,
 }
 
 struct FixtureState {
@@ -138,6 +140,7 @@ pub fn mutex_create() -> Option<MutexHandle> {
             locked: false,
             owner: None,
             deleted: false,
+            waiters: 0,
         },
     );
     Some(make_mutex_handle(id))
@@ -189,15 +192,23 @@ pub fn mutex_take(handle: &MutexHandle, ticks: u64) -> TakeStatus {
         // Determine wait duration for this attempt.
         let wait_ticks = ticks.min(max_finite);
 
+        // Track waiters so tests can verify blocking.
+        entry.waiters += 1;
+
         // Wait with timeout.
         let timeout = Duration::from_micros((wait_ticks as u128 * 1_000_000 / 1000) as u64);
 
+        // Drop the lock before we know the result — waiters is already
+        // recorded, and the Condvar takes ownership of `state`.
         let (_state, wait_result) = cvar.wait_timeout(state, timeout).unwrap();
         state = _state;
 
+        // Decrement waiters before any other action.
+        let entry = state.mutexes.get_mut(&id).unwrap();
+        entry.waiters = entry.waiters.saturating_sub(1);
+
         if wait_result.timed_out() {
             // Re-check one last time.
-            let entry = state.mutexes.get_mut(&id).unwrap();
             if !entry.locked {
                 entry.locked = true;
                 entry.owner = Some(current_thread);
@@ -265,6 +276,7 @@ pub fn counting_semaphore_create(max: u32, initial: u32) -> Option<SemaphoreHand
             count: initial,
             max_count: max,
             deleted: false,
+            waiters: 0,
         },
     );
     Some(make_semaphore_handle(id))
@@ -285,6 +297,7 @@ pub fn binary_semaphore_create() -> Option<SemaphoreHandle> {
             count: 0,
             max_count: 1,
             deleted: false,
+            waiters: 0,
         },
     );
     Some(make_semaphore_handle(id))
@@ -319,11 +332,17 @@ pub fn semaphore_take(handle: &SemaphoreHandle, ticks: u64) -> TakeStatus {
         let wait_ticks = ticks.min(max_finite);
         let timeout = Duration::from_micros((wait_ticks as u128 * 1_000_000 / 1000) as u64);
 
+        // Track waiters so tests can verify blocking.
+        entry.waiters += 1;
+
         let (_state, wait_result) = cvar.wait_timeout(state, timeout).unwrap();
         state = _state;
 
+        // Decrement waiters before any other action.
+        let entry = state.semaphores.get_mut(&id).unwrap();
+        entry.waiters = entry.waiters.saturating_sub(1);
+
         if wait_result.timed_out() {
-            let entry = state.semaphores.get_mut(&id).unwrap();
             if entry.count > 0 {
                 entry.count -= 1;
                 advance_virtual_ticks(wait_ticks);
@@ -438,4 +457,28 @@ pub fn sync_clear_take_call_ticks() {
 pub fn sync_give_call_count() -> usize {
     let (lock, _cvar) = &*FIXTURE;
     lock.lock().unwrap().give_call_count
+}
+
+#[allow(dead_code)]
+pub fn sync_mutex_waiters(handle: &MutexHandle) -> usize {
+    let id = id_from_mutex_handle(handle);
+    let (lock, _cvar) = &*FIXTURE;
+    lock.lock()
+        .unwrap()
+        .mutexes
+        .get(&id)
+        .map(|e| e.waiters)
+        .unwrap_or(0)
+}
+
+#[allow(dead_code)]
+pub fn sync_semaphore_waiters(handle: &SemaphoreHandle) -> usize {
+    let id = id_from_semaphore_handle(handle);
+    let (lock, _cvar) = &*FIXTURE;
+    lock.lock()
+        .unwrap()
+        .semaphores
+        .get(&id)
+        .map(|e| e.waiters)
+        .unwrap_or(0)
 }

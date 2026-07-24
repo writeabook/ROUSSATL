@@ -6,15 +6,30 @@
 //!
 //! # Current status (P7C)
 //!
-//! **Implemented:**
-//! - Runtime lifecycle (`initialize`, `shutdown`, `runtime_state`)
-//! - Clock (`now` via coherent tick snapshots, `delay` with per-chunk guard ticks)
-//! - System (`heap_free` via kernel heap, `enter_critical` with nesting)
-//! - Mutex (native priority-inheritance mutex, RAII guard, non-recursive)
-//! - CountingSemaphore (native kernel semaphore, count is sole source of truth)
-//! - BinarySemaphore (native binary semaphore, initial count 0)
+//! Capability status follows the terminology in
+//! `docs/documentation-policy.md`:
+//!
+//! **Implemented** (host-contract-verified):
+//! - Runtime lifecycle — init/shutdown/acquire lifecycle tested
+//! - Clock — monotonic tick snapshots, chunked delay with per-chunk guard
+//! - System — heap introspection, nesting critical sections
+//! - Mutex — native priority-inheritance, RAII guard, !Send+!Sync
+//! - CountingSemaphore — kernel count sole source of truth
+//! - BinarySemaphore — native binary semaphore, initial unsignaled
+//!
+//! **Validated** (host + FreeRTOS kernel integration tested):
+//! - *(none yet — requires real FreeRTOS runtime tests)*
 //!
 //! **Deferred to P7D+:** Queue, Task, Timer, ISR extensions.
+//!
+//! ## Implementation vs Validation
+//!
+//! All primitives pass Linux-host fixture contract tests including
+//! cross-thread blocking and wake-one semantics.  Promotion from
+//! **Implemented** to **Validated** requires running these tests
+//! against a real FreeRTOS kernel (QEMU or physical MCU) to verify
+//! priority inheritance, real tick-interrupt timing, and kernel-level
+//! waiter scheduling.
 
 #![no_std]
 

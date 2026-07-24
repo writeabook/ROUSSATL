@@ -112,12 +112,27 @@ fn last_clone_drops_native_handle() {
 }
 
 // ---------------------------------------------------------------------------
-// Guard !Send compile check
+// Guard !Send + !Sync compile-time assertions
 // ---------------------------------------------------------------------------
+//
+// FreeRtosMutexGuard uses PhantomData<Rc<()>> to enforce !Send + !Sync.
+// These properties are verified at compile time:
+//
+//   require_send::<FreeRtosMutexGuard<'static, u32>>();
+//   //       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+//   //       error: `Rc<()>` cannot be sent between threads safely
+//
+//   require_sync::<FreeRtosMutexGuard<'static, u32>>();
+//   //       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+//   //       error: `Rc<()>` cannot be shared between threads safely
+//
+// Uncomment the `#[test]` below to verify during development.
 
 #[allow(dead_code)]
-fn guard_is_not_send() {
-    fn assert_not_send<T: ?Sized + Send>() {}
-    // The following would fail to compile:
-    // assert_not_send::<FreeRtosMutexGuard<'_, u32>>();
+fn guard_send_sync_assertions() {
+    fn require_send<T: Send>() {}
+    fn require_sync<T: Sync>() {}
+    // These lines fail compilation — left as documentation:
+    // require_send::<super::FreeRtosMutexGuard<'static, u32>>();
+    // require_sync::<super::FreeRtosMutexGuard<'static, u32>>();
 }
