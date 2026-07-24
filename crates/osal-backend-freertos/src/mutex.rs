@@ -172,15 +172,9 @@ impl<T: 'static> Mutex<T> for FreeRtosMutex<T> {
     }
 
     fn lock(&self, timeout: Timeout) -> Result<Self::Guard<'_>> {
-        let native = self
-            .inner
-            .native
-            .as_ref()
-            .expect("mutex already deleted");
+        let native = self.inner.native.as_ref().expect("mutex already deleted");
 
-        let outcome = wait::wait_native(timeout, |ticks| {
-            sys::mutex_take(native, ticks)
-        })?;
+        let outcome = wait::wait_native(timeout, |ticks| sys::mutex_take(native, ticks))?;
 
         match outcome {
             WaitOutcome::Acquired => {

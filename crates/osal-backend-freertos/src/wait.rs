@@ -61,15 +61,13 @@ pub fn wait_native(
     mut take: impl FnMut(u64) -> sys::TakeStatus,
 ) -> Result<WaitOutcome> {
     match timeout {
-        Timeout::NoWait => {
-            match take(0) {
-                sys::TakeStatus::Acquired => Ok(WaitOutcome::Acquired),
-                sys::TakeStatus::Timeout => Ok(WaitOutcome::Unavailable),
-                sys::TakeStatus::Invalid => {
-                    panic!("FreeRTOS take returned Invalid on a live handle")
-                }
+        Timeout::NoWait => match take(0) {
+            sys::TakeStatus::Acquired => Ok(WaitOutcome::Acquired),
+            sys::TakeStatus::Timeout => Ok(WaitOutcome::Unavailable),
+            sys::TakeStatus::Invalid => {
+                panic!("FreeRTOS take returned Invalid on a live handle")
             }
-        }
+        },
         Timeout::After(d) => {
             if d == Duration::ZERO {
                 match take(0) {
@@ -99,8 +97,7 @@ fn wait_absolute_deadline(
         .checked_add(duration)
         .ok_or(Error::Overflow)?;
 
-    let caps = runtime::capabilities()
-        .expect("wait requires osal::initialize()");
+    let caps = runtime::capabilities().expect("wait requires osal::initialize()");
     let tick_rate = caps.tick_rate_hz;
     let max_native = sys::max_finite_delay_ticks() as u128;
     let max_payload = max_native
@@ -120,8 +117,7 @@ fn wait_absolute_deadline(
 
         let remaining = deadline.saturating_sub(now);
         let payload_ticks =
-            tick_time::duration_to_ticks_ceil(remaining, tick_rate)
-                .map_err(|_| Error::Overflow)?;
+            tick_time::duration_to_ticks_ceil(remaining, tick_rate).map_err(|_| Error::Overflow)?;
 
         let payload = payload_ticks.min(max_payload);
         let native_ticks = payload
@@ -143,9 +139,7 @@ fn wait_absolute_deadline(
     }
 }
 
-fn wait_forever(
-    mut take: impl FnMut(u64) -> sys::TakeStatus,
-) -> Result<WaitOutcome> {
+fn wait_forever(mut take: impl FnMut(u64) -> sys::TakeStatus) -> Result<WaitOutcome> {
     let max_finite = sys::max_finite_delay_ticks();
     loop {
         match take(max_finite) {

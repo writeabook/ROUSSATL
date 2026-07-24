@@ -102,7 +102,11 @@ fn last_clone_drops_native_handle() {
     drop(m1);
     assert_eq!(fixture::mutex_delete_count(), 0, "first clone dropped");
     drop(m2);
-    assert_eq!(fixture::mutex_delete_count(), 1, "last clone deleted native");
+    assert_eq!(
+        fixture::mutex_delete_count(),
+        1,
+        "last clone deleted native"
+    );
 
     teardown();
 }

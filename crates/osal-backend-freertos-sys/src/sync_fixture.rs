@@ -137,9 +137,7 @@ pub fn mutex_take(handle: &MutexHandle, ticks: u64) -> TakeStatus {
         let wait_ticks = ticks.min(max_finite);
 
         // Wait with timeout.
-        let timeout = Duration::from_micros(
-            (wait_ticks as u128 * 1_000_000 / 1000) as u64,
-        );
+        let timeout = Duration::from_micros((wait_ticks as u128 * 1_000_000 / 1000) as u64);
 
         let (_state, wait_result) = cvar.wait_timeout(state, timeout).unwrap();
         state = _state;
@@ -263,9 +261,7 @@ pub fn semaphore_take(handle: &SemaphoreHandle, ticks: u64) -> TakeStatus {
         }
 
         let wait_ticks = ticks.min(max_finite);
-        let timeout = Duration::from_micros(
-            (wait_ticks as u128 * 1_000_000 / 1000) as u64,
-        );
+        let timeout = Duration::from_micros((wait_ticks as u128 * 1_000_000 / 1000) as u64);
 
         let (_state, wait_result) = cvar.wait_timeout(state, timeout).unwrap();
         state = _state;

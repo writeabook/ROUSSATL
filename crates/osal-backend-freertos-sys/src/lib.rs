@@ -194,8 +194,7 @@ unsafe extern "C" {
     fn osal_freertos_mutex_take(handle: *mut core::ffi::c_void, ticks: u64) -> u32;
     fn osal_freertos_mutex_give(handle: *mut core::ffi::c_void) -> u32;
     fn osal_freertos_mutex_delete(handle: *mut core::ffi::c_void);
-    fn osal_freertos_counting_semaphore_create(max: u32, initial: u32)
-        -> *mut core::ffi::c_void;
+    fn osal_freertos_counting_semaphore_create(max: u32, initial: u32) -> *mut core::ffi::c_void;
     fn osal_freertos_binary_semaphore_create() -> *mut core::ffi::c_void;
     fn osal_freertos_semaphore_take(handle: *mut core::ffi::c_void, ticks: u64) -> u32;
     fn osal_freertos_semaphore_give(handle: *mut core::ffi::c_void) -> u32;
@@ -502,9 +501,7 @@ pub fn counting_semaphore_create(max: u32, initial: u32) -> Option<SemaphoreHand
     }
     #[cfg(not(feature = "test-fixture"))]
     {
-        let raw = unsafe {
-            osal_freertos_counting_semaphore_create(max, initial)
-        };
+        let raw = unsafe { osal_freertos_counting_semaphore_create(max, initial) };
         core::ptr::NonNull::new(raw).map(|nn| SemaphoreHandle { raw: nn })
     }
 }
@@ -530,9 +527,7 @@ pub fn semaphore_take(handle: &SemaphoreHandle, ticks: u64) -> TakeStatus {
     }
     #[cfg(not(feature = "test-fixture"))]
     {
-        let raw = unsafe {
-            osal_freertos_semaphore_take(handle.raw.as_ptr(), ticks)
-        };
+        let raw = unsafe { osal_freertos_semaphore_take(handle.raw.as_ptr(), ticks) };
         TakeStatus::from_raw(raw)
     }
 }
@@ -545,9 +540,7 @@ pub fn semaphore_give(handle: &SemaphoreHandle) -> GiveStatus {
     }
     #[cfg(not(feature = "test-fixture"))]
     {
-        let raw = unsafe {
-            osal_freertos_semaphore_give(handle.raw.as_ptr())
-        };
+        let raw = unsafe { osal_freertos_semaphore_give(handle.raw.as_ptr()) };
         GiveStatus::from_raw(raw)
     }
 }

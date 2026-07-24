@@ -91,8 +91,8 @@ impl FreeRtosCountingSemaphore {
         let lease = crate::runtime::acquire_object()?;
 
         // 4. Create native semaphore.
-        let handle = sys::counting_semaphore_create(max_count, initial_count)
-            .ok_or(Error::OutOfMemory)?;
+        let handle =
+            sys::counting_semaphore_create(max_count, initial_count).ok_or(Error::OutOfMemory)?;
 
         // 5. Construct inner.
         Ok(Self {
@@ -117,9 +117,7 @@ impl CountingSemaphore for FreeRtosCountingSemaphore {
             .as_ref()
             .expect("semaphore already deleted");
 
-        let outcome = wait::wait_native(timeout, |ticks| {
-            sys::semaphore_take(native, ticks)
-        })?;
+        let outcome = wait::wait_native(timeout, |ticks| sys::semaphore_take(native, ticks))?;
 
         match outcome {
             WaitOutcome::Acquired => Ok(()),
@@ -189,8 +187,7 @@ impl FreeRtosBinarySemaphore {
         let lease = crate::runtime::acquire_object()?;
 
         // 2. Create native binary semaphore.
-        let handle =
-            sys::binary_semaphore_create().ok_or(Error::OutOfMemory)?;
+        let handle = sys::binary_semaphore_create().ok_or(Error::OutOfMemory)?;
 
         // 3. Construct inner.
         Ok(Self {
@@ -215,9 +212,7 @@ impl BinarySemaphore for FreeRtosBinarySemaphore {
             .as_ref()
             .expect("semaphore already deleted");
 
-        let outcome = wait::wait_native(timeout, |ticks| {
-            sys::semaphore_take(native, ticks)
-        })?;
+        let outcome = wait::wait_native(timeout, |ticks| sys::semaphore_take(native, ticks))?;
 
         match outcome {
             WaitOutcome::Acquired => Ok(()),
@@ -264,11 +259,7 @@ impl osal_testkit::factory::SemaphoreFactory for FreeRtosSemaphoreFactory {
     type CountingSemaphore = FreeRtosCountingSemaphore;
     type BinarySemaphore = FreeRtosBinarySemaphore;
 
-    fn create_counting_semaphore(
-        &self,
-        max: u32,
-        initial: u32,
-    ) -> Result<Self::CountingSemaphore> {
+    fn create_counting_semaphore(&self, max: u32, initial: u32) -> Result<Self::CountingSemaphore> {
         FreeRtosCountingSemaphore::new(max, initial)
     }
 
