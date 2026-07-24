@@ -224,16 +224,23 @@ pub fn delay_ticks(ticks: u64) -> DelayStatus {
     #[cfg(feature = "test-fixture")]
     {
         use core::sync::atomic::Ordering;
-        // Fixture: advance virtual tick counter by `ticks`.
+        // Fixture: advance virtual tick counter by `ticks`, simulating
+        // wrap at the configured tick width (modulo 2^bits).
+        let bits = TICK_BITS_FIXTURE.load(Ordering::Relaxed);
+        let modulus: u128 = 1u128 << (bits as u32);
+
         let current_overflow = TICK_OVERFLOW_FIXTURE.load(Ordering::Relaxed);
         let current_count = TICK_COUNT_FIXTURE.load(Ordering::Relaxed);
 
-        let new_count = current_count.saturating_add(ticks);
-        let new_overflow = if new_count < current_count {
-            current_overflow.saturating_add(1)
-        } else {
-            current_overflow
-        };
+        let total: u128 = (current_count as u128)
+            .checked_add(ticks as u128)
+            .expect("fixture tick overflowed u128");
+
+        let wrap_count = total / modulus;
+        let new_count = (total % modulus) as u64;
+        let new_overflow = current_overflow
+            .checked_add(wrap_count as u64)
+            .expect("fixture overflow count overflowed u64");
 
         TICK_COUNT_FIXTURE.store(new_count, Ordering::Relaxed);
         TICK_OVERFLOW_FIXTURE.store(new_overflow, Ordering::Relaxed);
@@ -253,8 +260,7 @@ pub fn delay_ticks(ticks: u64) -> DelayStatus {
 pub fn max_finite_delay_ticks() -> u64 {
     #[cfg(feature = "test-fixture")]
     {
-        // Fixture: generous 64-bit range.
-        u64::MAX >> 1
+        MAX_FINITE_DELAY_FIXTURE.load(core::sync::atomic::Ordering::Relaxed)
     }
     #[cfg(not(feature = "test-fixture"))]
     {
@@ -326,24 +332,31 @@ pub fn critical_depth() -> usize {
 // Individual atomics avoid dependence on portable-atomic's Atomic<T>.
 
 #[cfg(feature = "test-fixture")]
-static TICK_OVERFLOW_FIXTURE: core::sync::atomic::AtomicU64 =
-    core::sync::atomic::AtomicU64::new(0);
+static TICK_OVERFLOW_FIXTURE: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
 
 #[cfg(feature = "test-fixture")]
-static TICK_COUNT_FIXTURE: core::sync::atomic::AtomicU64 =
-    core::sync::atomic::AtomicU64::new(0);
+static TICK_COUNT_FIXTURE: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
 
 #[cfg(feature = "test-fixture")]
 static SCHEDULER_STATE_FIXTURE: core::sync::atomic::AtomicU32 =
     core::sync::atomic::AtomicU32::new(SCHEDULER_RUNNING);
 
 #[cfg(feature = "test-fixture")]
-static HEAP_FREE_FIXTURE: core::sync::atomic::AtomicU64 =
-    core::sync::atomic::AtomicU64::new(65536);
+static HEAP_FREE_FIXTURE: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(65536);
 
 #[cfg(feature = "test-fixture")]
 static CRITICAL_DEPTH_FIXTURE: core::sync::atomic::AtomicU64 =
     core::sync::atomic::AtomicU64::new(0);
+
+/// Configurable tick width for wrap simulation (default: 32 bits).
+#[cfg(feature = "test-fixture")]
+static TICK_BITS_FIXTURE: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(32);
+
+/// Configurable max_finite_delay_ticks for forcing multi-chunk paths.
+/// Default matches 32-bit: (1 << 32) - 2.
+#[cfg(feature = "test-fixture")]
+static MAX_FINITE_DELAY_FIXTURE: core::sync::atomic::AtomicU64 =
+    core::sync::atomic::AtomicU64::new((1u64 << 32) - 2);
 
 #[cfg(feature = "test-fixture")]
 fn read_tick_fixture() -> TickSnapshot {
@@ -373,12 +386,27 @@ pub mod fixture {
         super::SCHEDULER_STATE_FIXTURE.store(super::SCHEDULER_RUNNING, Ordering::Relaxed);
         super::HEAP_FREE_FIXTURE.store(65536, Ordering::Relaxed);
         super::CRITICAL_DEPTH_FIXTURE.store(0, Ordering::Relaxed);
+        super::TICK_BITS_FIXTURE.store(32, Ordering::Relaxed);
+        super::MAX_FINITE_DELAY_FIXTURE.store((1u64 << 32) - 2, Ordering::Relaxed);
     }
 
     /// Set the tick snapshot that `tick_snapshot()` will return.
     pub fn set_tick_snapshot(overflow_count: u64, tick_count: u64) {
         super::TICK_OVERFLOW_FIXTURE.store(overflow_count, Ordering::Relaxed);
         super::TICK_COUNT_FIXTURE.store(tick_count, Ordering::Relaxed);
+    }
+
+    /// Set the tick width (bits) for wrap simulation (16, 32, or 64).
+    pub fn set_tick_bits(bits: u8) {
+        super::TICK_BITS_FIXTURE.store(bits, Ordering::Relaxed);
+    }
+
+    /// Set the value returned by `max_finite_delay_ticks()`.
+    ///
+    /// Use a small value (e.g. 7) to force multi-chunk delay paths in tests
+    /// without waiting for enormous durations.
+    pub fn set_max_finite_delay_ticks(value: u64) {
+        super::MAX_FINITE_DELAY_FIXTURE.store(value, Ordering::Relaxed);
     }
 
     /// Set the scheduler state returned by `scheduler_state()`.
@@ -400,5 +428,15 @@ pub mod fixture {
     /// Return the current critical-section nesting depth.
     pub fn critical_depth() -> usize {
         super::CRITICAL_DEPTH_FIXTURE.load(Ordering::Relaxed) as usize
+    }
+
+    /// Return the current tick count value (for test assertions).
+    pub fn tick_count() -> u64 {
+        super::TICK_COUNT_FIXTURE.load(Ordering::Relaxed)
+    }
+
+    /// Return the current overflow count value (for test assertions).
+    pub fn tick_overflow_count() -> u64 {
+        super::TICK_OVERFLOW_FIXTURE.load(Ordering::Relaxed)
     }
 }

@@ -73,7 +73,7 @@ Public APIs may change before version 1.0.
 | CountingSemaphore | Validated | Validated   | Validated   | Planned    | Validated   | Validated |
 | BinarySemaphore   | Validated | Validated   | Validated   | Planned    | Validated   | Validated |
 | Semaphore ISR     | Deferred  | N/A         | N/A         | Deferred   | Deferred    | Deferred  |
-| Clock             | Validated | Validated   | Validated   | Validated  | Validated   | Validated |
+| Clock             | Validated | Validated   | Validated   | Implemented| Validated   | Validated |
 | Timer             | Validated | Validated   | Validated   | Planned    | Validated   | Validated |
 | Timer ISR         | Deferred  | N/A         | N/A         | Deferred   | Deferred    | Deferred  |
 | System            | Validated | Validated   | Validated   | Validated  | Validated   | Validated |

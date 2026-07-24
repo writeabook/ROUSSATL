@@ -25,8 +25,8 @@
 //! ISR context.  ISR-safe critical sections (`taskENTER_CRITICAL_FROM_ISR`)
 //! are deferred per ADR 0003 / ADR 0008.
 
-use core::marker::PhantomData;
 use alloc::rc::Rc;
+use core::marker::PhantomData;
 
 use osal_api::traits::system::System;
 use osal_backend_freertos_sys as sys;

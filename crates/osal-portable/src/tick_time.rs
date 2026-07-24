@@ -187,7 +187,10 @@ mod tests {
             rate_hz: 1000,
             bits: 32,
         };
-        assert_eq!(snapshot_to_duration(snap, cfg).unwrap(), Duration::from_secs(1));
+        assert_eq!(
+            snapshot_to_duration(snap, cfg).unwrap(),
+            Duration::from_secs(1)
+        );
     }
 
     #[test]
@@ -357,7 +360,10 @@ mod tests {
     #[test]
     fn ceil_1ns_rounds_up_to_1_tick() {
         // Even 1 ns at 1 Hz must produce at least 1 tick.
-        assert_eq!(duration_to_ticks_ceil(Duration::from_nanos(1), 1).unwrap(), 1);
+        assert_eq!(
+            duration_to_ticks_ceil(Duration::from_nanos(1), 1).unwrap(),
+            1
+        );
     }
 
     #[test]

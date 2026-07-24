@@ -94,19 +94,26 @@ return early in violation of the contract.
 
 `Duration::ZERO` maps to 0 ticks.
 
-### 4. Guard tick for delay
+### 4. Guard tick for delay (per-chunk)
 
 `Clock::delay(d)` computes:
 
 ```text
-delay_ticks = ceil_ticks + 1
+ceil_ticks = ceil(d · rate_hz / 1e9)
 ```
 
-The extra guard tick compensates for the fact that `vTaskDelay(n)`
-blocks for *up to* `n` full tick periods, but the call can occur
-anywhere within the current tick. Adding one tick ensures the caller
-is blocked for **at least** the requested `Duration` regardless of
-phase alignment.
+Every **individual** `vTaskDelay(n)` call adds one guard tick:
+
+```text
+native_ticks = payload + 1   (where payload ≤ max_finite - 1)
+```
+
+The guard tick compensates for the fact that `vTaskDelay(n)` blocks
+for *up to* `n` full tick periods, but the call can occur anywhere
+within the current tick. Because the delay may be split into multiple
+native `vTaskDelay` calls (see §5), each native call receives its own
+guard tick — a single global guard tick would not compensate for the
+phase-alignment error accumulated across chunks.
 
 FreeRTOS documentation confirms that `vTaskDelay()` blocks for the
 requested number of tick interrupts *from the next tick*, not from
@@ -123,14 +130,20 @@ uint64_t osal_freertos_max_finite_delay_ticks(void);
 ```
 
 `osal_freertos_max_finite_delay_ticks()` returns `portMAX_DELAY - 1`.
-The Rust backend splits delays that exceed this maximum into
-consecutive finite chunks:
+The Rust backend splits delays that exceed `max_finite - 1` (reserving
+room for the per-chunk guard tick) into consecutive finite chunks:
 
 ```rust
-while remaining_ticks > 0 {
-    let chunk = remaining_ticks.min(max_finite_ticks as u128);
-    sys::delay_ticks(chunk as u64);
-    remaining_ticks -= chunk;
+let max_payload = max_native.saturating_sub(1); // reserve for guard tick
+let mut remaining_payload = ceil_ticks;
+
+while remaining_payload > 0 {
+    let payload = remaining_payload.min(max_payload);
+    let native_ticks = payload + 1;   // per-chunk guard tick
+
+    sys::delay_ticks(native_ticks as u64);
+
+    remaining_payload -= payload;
 }
 ```
 
@@ -180,6 +193,8 @@ scheduler restart is a new initialization epoch.
   produces `Error::Overflow` where a `Result` is available, or
   saturates to `Duration::MAX` where it is not.
 - Non-zero `delay()` never returns early due to tick rounding.
+  Each native `vTaskDelay` chunk receives its own guard tick so that
+  phase-alignment error does not accumulate across chunks.
 - Very long delays are split into chunks compatible with the native
   `TickType_t` width.
 - Scheduler-state violations are caught immediately with a clear

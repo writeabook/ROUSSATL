@@ -16,11 +16,14 @@ BaseType_t xTaskGetSchedulerState(void);
 // Time-out / delay support (ADR 0023)
 // ---------------------------------------------------------------------------
 
-// Minimal TimeOut_t struct — in real FreeRTOS this holds the tick count
-// and overflow count at the time vTaskSetTimeOutState was called.
+// Minimal TimeOut_t struct — mirrors the official FreeRTOS definition:
+//   typedef struct xTIME_OUT {
+//       BaseType_t xOverflowCount;
+//       TickType_t xTimeOnEntering;
+//   } TimeOut_t;
 typedef struct {
+    BaseType_t xOverflowCount;
     TickType_t xTimeOnEntering;
-    UBaseType_t xOverflowCount;
 } TimeOut_t;
 
 void vTaskSetTimeOutState(TimeOut_t *pxTimeOut);
